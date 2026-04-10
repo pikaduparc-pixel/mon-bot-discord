@@ -18,7 +18,8 @@ const {
   resetAll
 } = require('./xp');
 
-const TOKEN = 'MTQ5MDY4OTI2NDk5MDU1NjI4OQ.GiJhMX.5o8eOUA0M4CSN_SHKLGr7dT0JzOsgOz5-HI6WQ'; // 🔑 Remplace par ton token
+require('dotenv').config();
+const TOKEN = process.env.DISCORD_TOKEN;
 
 const client = new Client({
   intents: [
