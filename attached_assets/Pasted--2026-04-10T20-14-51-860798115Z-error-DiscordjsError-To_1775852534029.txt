@@ -1,0 +1,101 @@
+[2026-04-10T20:14:51.860798115Z] [error] DiscordjsError [TokenInvalid]: An invalid token was provided.
+[2026-04-10T20:14:51.860810369Z] [error]     at WebSocketManager.connect (/app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140:26)
+[2026-04-10T20:14:51.860817660Z] [error]     at Client.login (/app/node_modules/discord.js/src/client/Client.js:229:21)
+[2026-04-10T20:14:51.860826109Z] [error]     at Object.<anonymous> (/app/index.js:453:8)
+[2026-04-10T20:14:51.860837935Z] [error] /app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140
+[2026-04-10T20:14:51.860839933Z] [error]     at Module._compile (node:internal/modules/cjs/loader:1705:14)
+[2026-04-10T20:14:51.860845255Z] [error]     at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+[2026-04-10T20:14:51.860852075Z] [error]     const invalidToken = new DiscordjsError(ErrorCodes.TokenInvalid);
+[2026-04-10T20:14:51.860858015Z] [error]     at Object..js (node:internal/modules/cjs/loader:1838:10)
+[2026-04-10T20:14:51.860864944Z] [error]     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5) {
+[2026-04-10T20:14:51.860890471Z] [error]     at Module.load (node:internal/modules/cjs/loader:1441:32)
+[2026-04-10T20:14:51.860897387Z] [error]   code: 'TokenInvalid'
+[2026-04-10T20:14:51.860903893Z] [error]     at Function._load (node:internal/modules/cjs/loader:1263:12)
+[2026-04-10T20:14:51.860915550Z] [error]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[2026-04-10T20:14:51.860916580Z] [error] }
+[2026-04-10T20:14:51.860928815Z] [error] 
+[2026-04-10T20:14:51.860941010Z] [error] Node.js v22.22.2
+[2026-04-10T20:14:51.860997896Z] [error] /app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140
+[2026-04-10T20:14:51.861005314Z] [error]     const invalidToken = new DiscordjsError(ErrorCodes.TokenInvalid);
+[2026-04-10T20:14:51.861013265Z] [error]                          ^
+[2026-04-10T20:14:51.861021612Z] [error] 
+[2026-04-10T20:14:53.266410836Z] [error]     at Object.<anonymous> (/app/index.js:453:8)
+[2026-04-10T20:14:53.266602512Z] [error]     at Module._compile (node:internal/modules/cjs/loader:1705:14)
+[2026-04-10T20:14:53.266620265Z] [error]     at Object..js (node:internal/modules/cjs/loader:1838:10)
+[2026-04-10T20:14:53.266627987Z] [error]     at Module.load (node:internal/modules/cjs/loader:1441:32)
+[2026-04-10T20:14:53.266638406Z] [error] /app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140
+[2026-04-10T20:14:53.266638719Z] [error]     at Function._load (node:internal/modules/cjs/loader:1263:12)
+[2026-04-10T20:14:53.266650096Z] [error]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[2026-04-10T20:14:53.266651674Z] [error]     const invalidToken = new DiscordjsError(ErrorCodes.TokenInvalid);
+[2026-04-10T20:14:53.266661180Z] [error]                          ^
+[2026-04-10T20:14:53.266664425Z] [error]     at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+[2026-04-10T20:14:53.266671538Z] [error] 
+[2026-04-10T20:14:53.266678589Z] [error]     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5) {
+[2026-04-10T20:14:53.266682367Z] [error] DiscordjsError [TokenInvalid]: An invalid token was provided.
+[2026-04-10T20:14:53.266688189Z] [error]   code: 'TokenInvalid'
+[2026-04-10T20:14:53.266695473Z] [error] }
+[2026-04-10T20:14:53.266705542Z] [error] 
+[2026-04-10T20:14:53.266741660Z] [error] Node.js v22.22.2
+[2026-04-10T20:14:53.266861806Z] [error]                          ^
+[2026-04-10T20:14:53.266870648Z] [error] 
+[2026-04-10T20:14:53.266881336Z] [error] DiscordjsError [TokenInvalid]: An invalid token was provided.
+[2026-04-10T20:14:53.266890646Z] [error]     at WebSocketManager.connect (/app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140:26)
+[2026-04-10T20:14:53.266898340Z] [error]     at Client.login (/app/node_modules/discord.js/src/client/Client.js:229:21)
+[2026-04-10T20:14:54.689803669Z] [error]     at Module._compile (node:internal/modules/cjs/loader:1705:14)
+[2026-04-10T20:14:54.689814503Z] [error]     at Object..js (node:internal/modules/cjs/loader:1838:10)
+[2026-04-10T20:14:54.689823207Z] [error]     at Module.load (node:internal/modules/cjs/loader:1441:32)
+[2026-04-10T20:14:54.689831621Z] [error]     at Function._load (node:internal/modules/cjs/loader:1263:12)
+[2026-04-10T20:14:54.689834745Z] [error]   code: 'TokenInvalid'
+[2026-04-10T20:14:54.689840965Z] [error]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[2026-04-10T20:14:54.689851254Z] [error] }
+[2026-04-10T20:14:54.689851672Z] [error]     at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+[2026-04-10T20:14:54.689859745Z] [error]     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5) {
+[2026-04-10T20:14:54.689867008Z] [error] 
+[2026-04-10T20:14:54.689876086Z] [error] Node.js v22.22.2
+[2026-04-10T20:14:54.689887751Z] [error]     at WebSocketManager.connect (/app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140:26)
+[2026-04-10T20:14:54.689895085Z] [error]     at Client.login (/app/node_modules/discord.js/src/client/Client.js:229:21)
+[2026-04-10T20:14:54.689902601Z] [error]     at Object.<anonymous> (/app/index.js:453:8)
+[2026-04-10T20:14:55.968122290Z] [error] /app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140
+[2026-04-10T20:14:55.968127688Z] [error]     const invalidToken = new DiscordjsError(ErrorCodes.TokenInvalid);
+[2026-04-10T20:14:55.968134413Z] [error]                          ^
+[2026-04-10T20:14:55.968142941Z] [error] 
+[2026-04-10T20:14:55.968158142Z] [error] DiscordjsError [TokenInvalid]: An invalid token was provided.
+[2026-04-10T20:14:55.968163981Z] [error]     at WebSocketManager.connect (/app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140:26)
+[2026-04-10T20:14:55.968170285Z] [error]     at Client.login (/app/node_modules/discord.js/src/client/Client.js:229:21)
+[2026-04-10T20:14:55.968176091Z] [error]     at Object.<anonymous> (/app/index.js:453:8)
+[2026-04-10T20:14:55.968186416Z] [error]     at Module._compile (node:internal/modules/cjs/loader:1705:14)
+[2026-04-10T20:14:55.968193297Z] [error]     at Object..js (node:internal/modules/cjs/loader:1838:10)
+[2026-04-10T20:14:55.968199015Z] [error]     at Module.load (node:internal/modules/cjs/loader:1441:32)
+[2026-04-10T20:14:55.968204615Z] [error]     at Function._load (node:internal/modules/cjs/loader:1263:12)
+[2026-04-10T20:14:55.968212797Z] [error]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[2026-04-10T20:14:55.968219902Z] [error]     at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+[2026-04-10T20:14:55.968228289Z] [error]     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5) {
+[2026-04-10T20:14:55.968763484Z] [error]   code: 'TokenInvalid'
+[2026-04-10T20:14:55.968774954Z] [error] }
+[2026-04-10T20:14:55.968783340Z] [error] 
+[2026-04-10T20:14:55.968791979Z] [error] Node.js v22.22.2
+[2026-04-10T20:14:58.466080000Z] [error] /app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140
+[2026-04-10T20:14:58.466088360Z] [error]     const invalidToken = new DiscordjsError(ErrorCodes.TokenInvalid);
+[2026-04-10T20:14:58.466095194Z] [error]                          ^
+[2026-04-10T20:14:58.466102526Z] [error] 
+[2026-04-10T20:14:58.466110950Z] [error] DiscordjsError [TokenInvalid]: An invalid token was provided.
+[2026-04-10T20:14:58.466119333Z] [error]     at WebSocketManager.connect (/app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140:26)
+[2026-04-10T20:14:58.466127938Z] [error]     at Client.login (/app/node_modules/discord.js/src/client/Client.js:229:21)
+[2026-04-10T20:14:58.466135827Z] [error]     at Object.<anonymous> (/app/index.js:453:8)
+[2026-04-10T20:14:58.466142695Z] [error]     at Module._compile (node:internal/modules/cjs/loader:1705:14)
+[2026-04-10T20:14:58.466150275Z] [error]     at Object..js (node:internal/modules/cjs/loader:1838:10)
+[2026-04-10T20:14:58.466157715Z] [error]     at Module.load (node:internal/modules/cjs/loader:1441:32)
+[2026-04-10T20:14:58.466165064Z] [error]     at Function._load (node:internal/modules/cjs/loader:1263:12)
+[2026-04-10T20:14:58.466171623Z] [error]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[2026-04-10T20:14:58.466179015Z] [error]     at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+[2026-04-10T20:14:58.466184972Z] [error]     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5) {
+[2026-04-10T20:14:58.466318693Z] [error]   code: 'TokenInvalid'
+[2026-04-10T20:14:58.466328987Z] [error] }
+[2026-04-10T20:14:58.466338561Z] [error] 
+[2026-04-10T20:14:58.466345491Z] [error] Node.js v22.22.2
+[2026-04-10T20:15:01.849043325Z] [error] /app/node_modules/discord.js/src/client/websocket/WebSocketManager.js:140
+[2026-04-10T20:15:01.849137222Z] [error]     const invalidToken = new DiscordjsError(ErrorCodes.TokenInvalid);
+[2026-04-10T20:15:01.849147228Z] [error]                          ^
+[2026-04-10T20:15:01.849156349Z] [error] 
+[2026-04-10T20:15:01.849166105Z] [error] DiscordjsError [TokenInvalid]: An invalid token was provided.
+... (109 more lines)
