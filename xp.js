@@ -67,4 +67,19 @@ async function resetAll() {
   await User.deleteMany({});
 }
 
-module.exports = { addXP, removeXP, getStats, getLevel, xpForLevel, getLeaderboard, resetAll };
+async function connectDB() {
+  await connect();
+  console.log('✅ Connecté à MongoDB');
+}
+
+async function connectDB() {
+  await connect();
+  console.log('✅ Connecté à MongoDB');
+}
+
+async function connectDB() {
+  await connect();
+  console.log('✅ Connecté à MongoDB');
+}
+
+module.exports = { connectDB, addXP, removeXP, getStats, getLevel, xpForLevel, getLeaderboard, resetAll };

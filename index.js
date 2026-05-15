@@ -13,6 +13,7 @@ const {
 } = require('discord.js');
 
 const {
+  connectDB, 
   addXP,
   removeXP,
   getStats,
@@ -95,6 +96,7 @@ async function updateRoles(member, level) {
 
 client.once('ready', async () => {
   console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
+    await connectDB();
 
   // 📋 Enregistrement des slash commands
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
