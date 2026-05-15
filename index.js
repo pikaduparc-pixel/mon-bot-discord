@@ -138,7 +138,7 @@ client.once('ready', async () => {
   }, 5 * 60 * 1000);
 
   // 🔄 Reset le 1er janvier
-  setInterval(() => {
+   setInterval(async () => {
     const now = new Date();
     if (now.getMonth() === 0 && now.getDate() === 1 && now.getHours() === 0 && now.getMinutes() === 0) {
       resetAll();
