@@ -1,13 +1,20 @@
-const fs = require('fs');
-const DB_FILE = './xp_data.json';
+const mongoose = require('mongoose');
 
-function loadData() {
-  if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, '{}');
-  return JSON.parse(fs.readFileSync(DB_FILE));
-}
+const userSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true },
+  username: String,
+  xp: { type: Number, default: 0 },
+  level: { type: Number, default: 0 }
+});
 
-function saveData(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
+const User = mongoose.model('User', userSchema);
+let connected = false;
+
+async function connect() {
+  if (!connected) {
+    await mongoose.connect(process.env.MONGODB_URI);
+    connected = true;
+  }
 }
 
 function xpForLevel(level) {
@@ -20,41 +27,44 @@ function getLevel(xp) {
   return Math.min(level, 100);
 }
 
-function addXP(userId, username, amount) {
-  const data = loadData();
-  if (!data[userId]) data[userId] = { username, xp: 0, level: 0 };
-  data[userId].username = username;
-  const oldLevel = data[userId].level;
-  data[userId].xp += amount;
-  const newLevel = getLevel(data[userId].xp);
-  data[userId].level = newLevel;
-  saveData(data);
-  return { xp: data[userId].xp, level: newLevel, leveledUp: newLevel > oldLevel };
+async function addXP(userId, username, amount) {
+  await connect();
+  let user = await User.findOne({ userId });
+  if (!user) user = new User({ userId, username, xp: 0, level: 0 });
+  user.username = username;
+  const oldLevel = user.level;
+  user.xp += amount;
+  user.level = getLevel(user.xp);
+  await user.save();
+  return { xp: user.xp, level: user.level, leveledUp: user.level > oldLevel };
 }
 
-function removeXP(userId, amount) {
-  const data = loadData();
-  if (!data[userId]) return null;
-  data[userId].xp = Math.max(0, data[userId].xp - amount);
-  data[userId].level = getLevel(data[userId].xp);
-  saveData(data);
-  return { xp: data[userId].xp, level: data[userId].level };
+async function removeXP(userId, amount) {
+  await connect();
+  const user = await User.findOne({ userId });
+  if (!user) return null;
+  user.xp = Math.max(0, user.xp - amount);
+  user.level = getLevel(user.xp);
+  await user.save();
+  return { xp: user.xp, level: user.level };
 }
 
-function getStats(userId) {
-  const data = loadData();
-  return data[userId] || null;
+async function getStats(userId) {
+  await connect();
+  const user = await User.findOne({ userId });
+  if (!user) return null;
+  return { username: user.username, xp: user.xp, level: user.level };
 }
 
-function getLeaderboard() {
-  const data = loadData();
-  return Object.entries(data)
-    .sort((a, b) => b[1].xp - a[1].xp)
-    .slice(0, 10);
+async function getLeaderboard() {
+  await connect();
+  const users = await User.find().sort({ xp: -1 }).limit(10);
+  return users.map(u => [u.userId, { username: u.username, xp: u.xp, level: u.level }]);
 }
 
-function resetAll() {
-  saveData({});
+async function resetAll() {
+  await connect();
+  await User.deleteMany({});
 }
 
 module.exports = { addXP, removeXP, getStats, getLevel, xpForLevel, getLeaderboard, resetAll };
