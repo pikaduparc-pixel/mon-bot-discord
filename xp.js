@@ -90,12 +90,16 @@ const MIGRATION_DATA = {
 async function connectDB() {
   await connect();
   console.log('✅ Connecté à MongoDB');
-  const count = await User.countDocuments();
-  if (count === 0) {
+  const miaw = await User.findOne({ userId: '1284974661528064050' });
+  if (!miaw || miaw.xp < 66990) {
     for (const [userId, stats] of Object.entries(MIGRATION_DATA)) {
-      await User.create({ userId, username: stats.username, xp: stats.xp, level: stats.level });
+      await User.findOneAndUpdate(
+        { userId },
+        { userId, username: stats.username, xp: stats.xp, level: stats.level },
+        { upsert: true }
+      );
     }
-    console.log('✅ Migration : 16 membres importés depuis xp_data.json');
+    console.log('✅ Migration : 16 membres restaurés depuis xp_data.json');
   }
 }
 
