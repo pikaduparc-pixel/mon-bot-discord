@@ -90,17 +90,32 @@ const MIGRATION_DATA = {
 async function connectDB() {
   await connect();
   console.log('✅ Connecté à MongoDB');
-  const miaw = await User.findOne({ userId: '1284974661528064050' });
-  if (!miaw || miaw.xp < 66990) {
-    for (const [userId, stats] of Object.entries(MIGRATION_DATA)) {
-      await User.findOneAndUpdate(
-        { userId },
-        { userId, username: stats.username, xp: stats.xp, level: stats.level },
-        { upsert: true }
-      );
-    }
-    console.log('✅ Migration : 16 membres restaurés depuis xp_data.json');
-  }
 }
 
-module.exports = { connectDB, addXP, removeXP, getStats, getLevel, xpForLevel, getLeaderboard, resetAll };
+async function runMigration() {
+  await connect();
+  for (const [userId, stats] of Object.entries(MIGRATION_DATA)) {
+    await User.findOneAndUpdate(
+      { userId },
+      { userId, username: stats.username, xp: stats.xp, level: stats.level },
+      { upsert: true }
+    );
+  }
+  console.log('✅ Migration : 16 membres restaurés');
+  return MIGRATION_DATA;
+}
+
+async function runMigration() {
+  await connect();
+  for (const [userId, stats] of Object.entries(MIGRATION_DATA)) {
+    await User.findOneAndUpdate(
+      { userId },
+      { userId, username: stats.username, xp: stats.xp, level: stats.level },
+      { upsert: true }
+    );
+  }
+  console.log('✅ Migration : 16 membres restaurés');
+  return MIGRATION_DATA;
+}
+
+module.exports = { connectDB, runMigration, addXP, removeXP, getStats, getLevel, xpForLevel, getLeaderboard, resetAll };
