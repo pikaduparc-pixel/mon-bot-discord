@@ -6,7 +6,11 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChannelType
+  ChannelType,
+  REST,
+  Routes,
+  SlashCommandBuilder,
+  Collection
 } = require('discord.js');
 
 const {
@@ -22,6 +26,8 @@ const {
 
 require('dotenv').config();
 const TOKEN = process.env.DISCORD_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({
   intents: [
@@ -64,10 +70,84 @@ async function updateRoles(member, level) {
   }
 }
 
+// ─── ENREGISTREMENT DES SLASH COMMANDS ───────────────────────────────────────
+const commands = [
+  new SlashCommandBuilder()
+    .setName('aide')
+    .setDescription('Affiche la liste des commandes'),
+
+  new SlashCommandBuilder()
+    .setName('rang')
+    .setDescription('Affiche ton rang ou celui d\'un membre')
+    .addUserOption(opt => opt.setName('membre').setDescription('Le membre à consulter').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('classement')
+    .setDescription('Affiche le top 10 du serveur'),
+
+  new SlashCommandBuilder()
+    .setName('kick')
+    .setDescription('Expulse un membre')
+    .addUserOption(opt => opt.setName('membre').setDescription('Le membre à expulser').setRequired(true))
+    .addStringOption(opt => opt.setName('raison').setDescription('Raison').setRequired(false))
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.KickMembers),
+
+  new SlashCommandBuilder()
+    .setName('ban')
+    .setDescription('Bannit un membre')
+    .addUserOption(opt => opt.setName('membre').setDescription('Le membre à bannir').setRequired(true))
+    .addStringOption(opt => opt.setName('raison').setDescription('Raison').setRequired(false))
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.BanMembers),
+
+  new SlashCommandBuilder()
+    .setName('mute')
+    .setDescription('Rend muet un membre pendant 10 minutes')
+    .addUserOption(opt => opt.setName('membre').setDescription('Le membre à mute').setRequired(true))
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers),
+
+  new SlashCommandBuilder()
+    .setName('givexp')
+    .setDescription('Donne de l\'XP à un membre')
+    .addUserOption(opt => opt.setName('membre').setDescription('Le membre').setRequired(true))
+    .addIntegerOption(opt => opt.setName('montant').setDescription('Quantité d\'XP').setRequired(true).setMinValue(1))
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+  new SlashCommandBuilder()
+    .setName('removexp')
+    .setDescription('Retire de l\'XP à un membre')
+    .addUserOption(opt => opt.setName('membre').setDescription('Le membre').setRequired(true))
+    .addIntegerOption(opt => opt.setName('montant').setDescription('Quantité d\'XP').setRequired(true).setMinValue(1))
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+  new SlashCommandBuilder()
+    .setName('setup-ticket')
+    .setDescription('Installe le panneau de tickets')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+
+  new SlashCommandBuilder()
+    .setName('migrate')
+    .setDescription('Restaure les données des membres')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
+].map(cmd => cmd.toJSON());
+
+async function deployCommands() {
+  const rest = new REST({ version: '10' }).setToken(TOKEN);
+  try {
+    console.log('🔄 Enregistrement des slash commands...');
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+    console.log('✅ Slash commands enregistrées !');
+  } catch (err) {
+    console.error('❌ Erreur enregistrement commands:', err);
+  }
+}
+
+// ─── READY ────────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
   await connectDB();
+  await deployCommands();
 
+  // XP vocal toutes les 5 minutes
   setInterval(async () => {
     for (const [userId] of voiceTracker) {
       const guild = client.guilds.cache.first();
@@ -85,6 +165,7 @@ client.once('ready', async () => {
     }
   }, 5 * 60 * 1000);
 
+  // Reset annuel
   setInterval(async () => {
     const now = new Date();
     if (now.getMonth() === 0 && now.getDate() === 1 && now.getHours() === 0 && now.getMinutes() === 0) {
@@ -98,12 +179,14 @@ client.once('ready', async () => {
   }, 60 * 1000);
 });
 
+// ─── VOICE ────────────────────────────────────────────────────────────────────
 client.on('voiceStateUpdate', (oldState, newState) => {
   const userId = newState.id;
   if (!oldState.channelId && newState.channelId) voiceTracker.set(userId, Date.now());
   if (oldState.channelId && !newState.channelId) voiceTracker.delete(userId);
 });
 
+// ─── WELCOME ──────────────────────────────────────────────────────────────────
 client.on('guildMemberAdd', async (member) => {
   const roleNames = ['Membre', '🐒 Bébé Singe'];
   for (const name of roleNames) {
@@ -122,9 +205,9 @@ client.on('guildMemberAdd', async (member) => {
   channel.send({ embeds: [embed] });
 });
 
+// ─── XP PAR MESSAGE ───────────────────────────────────────────────────────────
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
-
   const now = Date.now();
   const lastMessage = cooldowns.get(message.author.id) || 0;
   if (now - lastMessage > 60 * 1000) {
@@ -138,35 +221,82 @@ client.on('messageCreate', async (message) => {
       if (levelChannel) levelChannel.send(`🎉 Félicitations ${message.author} ! Tu passes au niveau **${result.level}** ! 🚀`);
     }
   }
+});
 
-  if (!message.content.startsWith('!')) return;
-  const args = message.content.slice(1).trim().split(/ +/);
-  const command = args.shift().toLowerCase();
+// ─── SLASH COMMANDS ───────────────────────────────────────────────────────────
+client.on('interactionCreate', async (interaction) => {
 
-  if (command === 'bonjour') {
-    message.reply(`👋 Bonjour ${message.author.username} !`);
+  // ── BOUTONS ────────────────────────────────────────────────────────────────
+  if (interaction.isButton()) {
+    if (interaction.customId === 'create_ticket') {
+      const guild = interaction.guild;
+      const user = interaction.user;
+      const existing = guild.channels.cache.find(c => c.name === `ticket-${user.username.toLowerCase()}`);
+      if (existing) return interaction.reply({ content: `❌ Tu as déjà un ticket ouvert : ${existing}`, ephemeral: true });
+      const adminRole = guild.roles.cache.find(r => r.name === 'Admin');
+      const ticketCategory = guild.channels.cache.find(c => c.name.toLowerCase() === 'ticket' && c.type === ChannelType.GuildCategory);
+      const ticketChannel = await guild.channels.create({
+        name: `ticket-${user.username.toLowerCase()}`,
+        type: ChannelType.GuildText,
+        parent: ticketCategory?.id || null,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+          ...(adminRole ? [{ id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }] : [])
+        ]
+      }).catch(err => { console.error('Erreur création ticket:', err.message); return null; });
+      if (!ticketChannel) return interaction.reply({ content: '❌ Erreur lors de la création du ticket.', ephemeral: true });
+      const closeRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 Fermer le ticket').setStyle(ButtonStyle.Danger)
+      );
+      const ticketEmbed = new EmbedBuilder()
+        .setColor(0x2C2F33)
+        .setTitle(`🎫 Ticket de ${user.username}`)
+        .setDescription(`Bonjour ${user} ! L'équipe va te répondre rapidement.\nExplique ton problème ci-dessous.`)
+        .setTimestamp();
+      await ticketChannel.send({ embeds: [ticketEmbed], components: [closeRow] });
+      const modTicketChannel = guild.channels.cache.find(c =>
+        c.name.toLowerCase() === 'ticket' && c.type === ChannelType.GuildText &&
+        (c.parent?.name?.toLowerCase() === 'modération' || c.parent?.name?.toLowerCase() === 'moderation')
+      );
+      if (modTicketChannel) modTicketChannel.send(`📋 Nouveau ticket créé par **${user.tag}** → ${ticketChannel}`);
+      return interaction.reply({ content: `✅ Ton ticket a été créé : ${ticketChannel}`, ephemeral: true });
+    }
+
+    if (interaction.customId === 'close_ticket') {
+      if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+        return interaction.reply({ content: '❌ Seuls les admins peuvent fermer un ticket.', ephemeral: true });
+      await interaction.reply('🔒 Fermeture du ticket dans 5 secondes...');
+      setTimeout(() => interaction.channel.delete().catch(err => console.error('Erreur suppression ticket:', err.message)), 5000);
+    }
+    return;
   }
 
-  if (command === 'aide') {
+  // ── COMMANDES ──────────────────────────────────────────────────────────────
+  if (!interaction.isChatInputCommand()) return;
+  const { commandName } = interaction;
+
+  // /aide
+  if (commandName === 'aide') {
     const embed = new EmbedBuilder()
       .setColor(0x2C2F33)
       .setTitle('📋 Commandes disponibles')
       .addFields(
-        { name: '👋 Général', value: '`!bonjour` `!aide` `!rang` `!rang @user` `!classement`' },
-        { name: '🛡️ Modération (admin)', value: '`!kick @user` `!ban @user` `!mute @user`' },
-        { name: '⭐ XP (admin)', value: '`!givexp @user [montant]` `!removexp @user [montant]`' },
-        { name: '🎫 Ticket (admin)', value: '`!setup-ticket`' }
+        { name: '👋 Général', value: '`/aide` `/rang` `/classement`' },
+        { name: '🛡️ Modération (admin)', value: '`/kick` `/ban` `/mute`' },
+        { name: '⭐ XP (admin)', value: '`/givexp` `/removexp`' },
+        { name: '🎫 Ticket (admin)', value: '`/setup-ticket`' }
       );
-    message.reply({ embeds: [embed] });
+    return interaction.reply({ embeds: [embed] });
   }
 
-  if (command === 'rang') {
-    const target = message.mentions.users.first() || message.author;
+  // /rang
+  if (commandName === 'rang') {
+    const target = interaction.options.getUser('membre') || interaction.user;
     const stats = await getStats(target.id);
-    if (!stats) return message.reply(`❌ ${target.username} n'a pas encore d'XP !`);
+    if (!stats) return interaction.reply({ content: `❌ ${target.username} n'a pas encore d'XP !`, ephemeral: true });
     const nextLevelXP = xpForLevel(stats.level + 1);
-    const progress = Math.min(Math.floor((stats.xp / nextLevelXP) * 20), 20);
-    const bar = '█'.repeat(progress) + '░'.repeat(20 - progress);
+    const percent = Math.min(Math.floor((stats.xp / nextLevelXP) * 100), 100);
     const embed = new EmbedBuilder()
       .setColor(0x2C2F33)
       .setTitle(`📊 Rang de ${stats.username}`)
@@ -174,14 +304,15 @@ client.on('messageCreate', async (message) => {
       .addFields(
         { name: '⭐ Niveau', value: `**${stats.level}**`, inline: true },
         { name: '✨ XP', value: `**${stats.xp}** / ${nextLevelXP} XP`, inline: true },
-        { name: '📈 Progression', value: `\`[${bar}]\`` }
+        { name: '📈 Progression', value: `**${percent}%** vers le niveau suivant` }
       );
-    message.reply({ embeds: [embed] });
+    return interaction.reply({ embeds: [embed] });
   }
 
-  if (command === 'classement') {
+  // /classement
+  if (commandName === 'classement') {
     const top = await getLeaderboard();
-    if (!top.length) return message.reply('❌ Aucun classement pour l\'instant.');
+    if (!top.length) return interaction.reply({ content: '❌ Aucun classement pour l\'instant.', ephemeral: true });
     const medals = ['🥇', '🥈', '🥉'];
     const lines = top.map(([id, data], i) =>
       `${medals[i] || `${i + 1}.`} **${data.username}** — Niveau ${data.level} (${data.xp} XP)`
@@ -190,74 +321,58 @@ client.on('messageCreate', async (message) => {
       .setColor(0x2C2F33)
       .setTitle('🏆 Classement du serveur')
       .setDescription(lines.join('\n'));
-    message.reply({ embeds: [embed] });
+    return interaction.reply({ embeds: [embed] });
   }
 
-  if (command === 'kick') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.KickMembers))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    const member = message.mentions.members.first();
-    if (!member) return message.reply('❌ Mentionne un membre.');
-    await member.kick().catch(err => message.reply(`❌ Erreur: ${err.message}`));
-    message.reply(`✅ ${member.user.tag} a été expulsé.`);
+  // /kick
+  if (commandName === 'kick') {
+    const member = interaction.options.getMember('membre');
+    const raison = interaction.options.getString('raison') || 'Aucune raison fournie';
+    if (!member) return interaction.reply({ content: '❌ Membre introuvable.', ephemeral: true });
+    await member.kick(raison).catch(err => interaction.reply({ content: `❌ Erreur: ${err.message}`, ephemeral: true }));
+    return interaction.reply({ content: `✅ **${member.user.tag}** a été expulsé. Raison : ${raison}` });
   }
 
-  if (command === 'ban') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    const member = message.mentions.members.first();
-    if (!member) return message.reply('❌ Mentionne un membre.');
-    await member.ban().catch(err => message.reply(`❌ Erreur: ${err.message}`));
-    message.reply(`✅ ${member.user.tag} a été banni.`);
+  // /ban
+  if (commandName === 'ban') {
+    const member = interaction.options.getMember('membre');
+    const raison = interaction.options.getString('raison') || 'Aucune raison fournie';
+    if (!member) return interaction.reply({ content: '❌ Membre introuvable.', ephemeral: true });
+    await member.ban({ reason: raison }).catch(err => interaction.reply({ content: `❌ Erreur: ${err.message}`, ephemeral: true }));
+    return interaction.reply({ content: `✅ **${member.user.tag}** a été banni. Raison : ${raison}` });
   }
 
-  if (command === 'mute') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    const member = message.mentions.members.first();
-    if (!member) return message.reply('❌ Mentionne un membre.');
-    await member.timeout(10 * 60 * 1000).catch(err => message.reply(`❌ Erreur: ${err.message}`));
-    message.reply(`✅ ${member.user.tag} est mute pour 10 minutes.`);
+  // /mute
+  if (commandName === 'mute') {
+    const member = interaction.options.getMember('membre');
+    if (!member) return interaction.reply({ content: '❌ Membre introuvable.', ephemeral: true });
+    await member.timeout(10 * 60 * 1000).catch(err => interaction.reply({ content: `❌ Erreur: ${err.message}`, ephemeral: true }));
+    return interaction.reply({ content: `✅ **${member.user.tag}** est mute pour 10 minutes.` });
   }
 
-  if (command === 'givexp') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    const target = message.mentions.users.first();
-    const amount = parseInt(args[1]);
-    if (!target || isNaN(amount) || amount <= 0)
-      return message.reply('❌ Utilisation : `!givexp @user [montant]`');
+  // /givexp
+  if (commandName === 'givexp') {
+    const target = interaction.options.getUser('membre');
+    const amount = interaction.options.getInteger('montant');
     const result = await addXP(target.id, target.username, amount);
-    const member = await message.guild.members.fetch(target.id).catch(() => null);
+    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
     if (member) await updateRoles(member, result.level);
-    message.reply(`✅ **+${amount} XP** donné à ${target.username} ! (Total : ${result.xp} XP — Niveau ${result.level})`);
+    return interaction.reply({ content: `✅ **+${amount} XP** donné à ${target.username} ! (Total : ${result.xp} XP — Niveau ${result.level})` });
   }
 
-  if (command === 'removexp') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    const target = message.mentions.users.first();
-    const amount = parseInt(args[1]);
-    if (!target || isNaN(amount) || amount <= 0)
-      return message.reply('❌ Utilisation : `!removexp @user [montant]`');
+  // /removexp
+  if (commandName === 'removexp') {
+    const target = interaction.options.getUser('membre');
+    const amount = interaction.options.getInteger('montant');
     const result = await removeXP(target.id, amount);
-    if (!result) return message.reply('❌ Cet utilisateur n\'a pas d\'XP.');
-    const member = await message.guild.members.fetch(target.id).catch(() => null);
+    if (!result) return interaction.reply({ content: '❌ Cet utilisateur n\'a pas d\'XP.', ephemeral: true });
+    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
     if (member) await updateRoles(member, result.level);
-    message.reply(`✅ **-${amount} XP** retiré à ${target.username} ! (Total : ${result.xp} XP — Niveau ${result.level})`);
+    return interaction.reply({ content: `✅ **-${amount} XP** retiré à ${target.username} ! (Total : ${result.xp} XP — Niveau ${result.level})` });
   }
 
-  if (command === 'admin-migrate') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    await message.reply('⏳ Migration en cours...');
-    await runMigration();
-    return message.reply('✅ Migration terminée ! 16 membres restaurés.');
-  }
-
-  if (command === 'setup-ticket') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply('❌ Tu n\'as pas la permission.');
+  // /setup-ticket
+  if (commandName === 'setup-ticket') {
     const embed = new EmbedBuilder()
       .setColor(0x2C2F33)
       .setTitle('🎫 Créer un ticket')
@@ -265,62 +380,21 @@ client.on('messageCreate', async (message) => {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('create_ticket').setLabel('📩 Créer un ticket').setStyle(ButtonStyle.Secondary)
     );
-    await message.channel.send({ embeds: [embed], components: [row] });
-    await message.delete().catch(() => {});
+    await interaction.channel.send({ embeds: [embed], components: [row] });
+    return interaction.reply({ content: '✅ Panneau de tickets installé !', ephemeral: true });
+  }
+
+  // /migrate
+  if (commandName === 'migrate') {
+    await interaction.reply({ content: '⏳ Migration en cours...', ephemeral: true });
+    await runMigration();
+    return interaction.editReply({ content: '✅ Migration terminée ! 16 membres restaurés.' });
   }
 });
 
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  if (interaction.customId === 'create_ticket') {
-    const guild = interaction.guild;
-    const user = interaction.user;
-    const existing = guild.channels.cache.find(c => c.name === `ticket-${user.username.toLowerCase()}`);
-    if (existing) return interaction.reply({ content: `❌ Tu as déjà un ticket ouvert : ${existing}`, ephemeral: true });
-    const adminRole = guild.roles.cache.find(r => r.name === 'Admin');
-    const ticketCategory = guild.channels.cache.find(c => c.name.toLowerCase() === 'ticket' && c.type === ChannelType.GuildCategory);
-    const ticketChannel = await guild.channels.create({
-      name: `ticket-${user.username.toLowerCase()}`,
-      type: ChannelType.GuildText,
-      parent: ticketCategory?.id || null,
-      permissionOverwrites: [
-        { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
-        ...(adminRole ? [{ id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }] : [])
-      ]
-    }).catch(err => { console.error('Erreur création ticket:', err.message); return null; });
-    if (!ticketChannel) return interaction.reply({ content: '❌ Erreur lors de la création du ticket.', ephemeral: true });
-    const closeRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 Fermer le ticket').setStyle(ButtonStyle.Danger)
-    );
-    const ticketEmbed = new EmbedBuilder()
-      .setColor(0x2C2F33)
-      .setTitle(`🎫 Ticket de ${user.username}`)
-      .setDescription(`Bonjour ${user} ! L'équipe va te répondre rapidement.\nExplique ton problème ci-dessous.`)
-      .setTimestamp();
-    await ticketChannel.send({ embeds: [ticketEmbed], components: [closeRow] });
-    const modTicketChannel = guild.channels.cache.find(c =>
-      c.name.toLowerCase() === 'ticket' && c.type === ChannelType.GuildText &&
-      (c.parent?.name?.toLowerCase() === 'modération' || c.parent?.name?.toLowerCase() === 'moderation')
-    );
-    if (modTicketChannel) modTicketChannel.send(`📋 Nouveau ticket créé par **${user.tag}** → ${ticketChannel}`);
-    return interaction.reply({ content: `✅ Ton ticket a été créé : ${ticketChannel}`, ephemeral: true });
-  }
-
-  if (interaction.customId === 'close_ticket') {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return interaction.reply({ content: '❌ Seuls les admins peuvent fermer un ticket.', ephemeral: true });
-    await interaction.reply('🔒 Fermeture du ticket dans 5 secondes...');
-    setTimeout(() => interaction.channel.delete().catch(err => console.error('Erreur suppression ticket:', err.message)), 5000);
-  }
-});
+// ─── SERVEUR HTTP (pour Railway) ──────────────────────────────────────────────
+const http = require('http');
+http.createServer((req, res) => { res.writeHead(200); res.end('Bot en ligne !'); })
+  .listen(process.env.PORT || 3000);
 
 client.login(TOKEN);
-
-const http = require('http');
-const server = http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end('Bot en ligne !');
-});
-server.listen(process.env.PORT || 3000);
