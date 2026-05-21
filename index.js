@@ -93,7 +93,7 @@ const slashCommands = [
         .setRequired(false)),
 
   new SlashCommandBuilder()
-    .setName('classement')
+    .setName('lb')
     .setDescription('Affiche le top 10 du serveur'),
 
   new SlashCommandBuilder()
@@ -357,7 +357,7 @@ client.on('interactionCreate', async (interaction) => {
   }
 
   // /classement et /lb
-  if (cmd === 'classement' || cmd === 'lb') {
+  if (cmd === 'lb') {
     const top = await getLeaderboard();
     if (!top.length) return interaction.reply({ content: '❌ Aucun classement pour l\'instant.', ephemeral: true });
     const medals = ['🥇', '🥈', '🥉'];
@@ -430,7 +430,7 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.channel.send({ embeds: [embed], components: [row] });
     return interaction.reply({ content: '✅ Panneau de tickets installé !', ephemeral: true });
   }
-  
+
 // ─────────────────────────────────────────────
 //  SERVEUR HTTP (KEEP ALIVE POUR RAILWAY)
 // ─────────────────────────────────────────────
