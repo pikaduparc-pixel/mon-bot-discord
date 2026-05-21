@@ -25,13 +25,10 @@ const {
   resetAll
 } = require('./xp');
 
-const TOKEN    = process.env.DISCORD_TOKEN;
+const TOKEN     = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID  = process.env.GUILD_ID;
 
-// ─────────────────────────────────────────────
-//  CLIENT
-// ─────────────────────────────────────────────
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -42,12 +39,9 @@ const client = new Client({
   ]
 });
 
-const cooldowns   = new Map();
+const cooldowns    = new Map();
 const voiceTracker = new Map();
 
-// ─────────────────────────────────────────────
-//  RÔLES PAR NIVEAU
-// ─────────────────────────────────────────────
 const ROLE_LEVELS = [
   { level: 1,   name: '🐒 Bébé Singe' },
   { level: 10,  name: '🐵 Ptit Singe' },
@@ -76,9 +70,7 @@ async function updateRoles(member, level) {
   }
 }
 
-// ─────────────────────────────────────────────
-//  DÉFINITION DES SLASH COMMANDS
-// ─────────────────────────────────────────────
+// ── SLASH COMMANDS ────────────────────────────────────────────────────────────
 const slashCommands = [
   new SlashCommandBuilder()
     .setName('aide')
@@ -88,13 +80,7 @@ const slashCommands = [
     .setName('rang')
     .setDescription('Affiche ton rang XP ou celui d\'un membre')
     .addUserOption(opt =>
-      opt.setName('membre')
-        .setDescription('Le membre à consulter')
-        .setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('lb')
-    .setDescription('Affiche le top 10 du serveur'),
+      opt.setName('membre').setDescription('Le membre à consulter').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('lb')
@@ -148,35 +134,25 @@ const slashCommands = [
     .setDescription('Installe le panneau de tickets dans ce salon (admin)')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
 
-
 ].map(cmd => cmd.toJSON());
 
-// ─────────────────────────────────────────────
-//  ENREGISTREMENT DES COMMANDES AU DÉMARRAGE
-// ─────────────────────────────────────────────
 async function deployCommands() {
   const rest = new REST({ version: '10' }).setToken(TOKEN);
   try {
     console.log('🔄 Enregistrement des slash commands...');
-    await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: slashCommands }
-    );
-    console.log('✅ Slash commands enregistrées avec succès !');
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: slashCommands });
+    console.log('✅ Slash commands enregistrées !');
   } catch (err) {
-    console.error('❌ Erreur lors de l\'enregistrement des commands :', err);
+    console.error('❌ Erreur enregistrement commands :', err);
   }
 }
 
-// ─────────────────────────────────────────────
-//  READY
-// ─────────────────────────────────────────────
+// ── READY ─────────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
   await connectDB();
   await deployCommands();
 
-  // XP vocal toutes les 5 minutes
   setInterval(async () => {
     for (const [userId] of voiceTracker) {
       const guild = client.guilds.cache.first();
@@ -194,7 +170,6 @@ client.once('ready', async () => {
     }
   }, 5 * 60 * 1000);
 
-  // Reset XP le 1er janvier
   setInterval(async () => {
     const now = new Date();
     if (now.getMonth() === 0 && now.getDate() === 1 && now.getHours() === 0 && now.getMinutes() === 0) {
@@ -202,24 +177,20 @@ client.once('ready', async () => {
       const guild = client.guilds.cache.first();
       if (guild) {
         const channel = guild.channels.cache.find(c => c.name === 'général' || c.name === 'general');
-        if (channel) channel.send('🔄 Bonne année ! Les XP et niveaux ont été remis à zéro ! 🎆');
+        if (channel) channel.send('🔄 Bonne année ! Les XP ont été remis à zéro ! 🎆');
       }
     }
   }, 60 * 1000);
 });
 
-// ─────────────────────────────────────────────
-//  VOCAL — SUIVI ENTRÉE/SORTIE
-// ─────────────────────────────────────────────
+// ── VOCAL ─────────────────────────────────────────────────────────────────────
 client.on('voiceStateUpdate', (oldState, newState) => {
   const userId = newState.id;
   if (!oldState.channelId && newState.channelId) voiceTracker.set(userId, Date.now());
   if (oldState.channelId && !newState.channelId) voiceTracker.delete(userId);
 });
 
-// ─────────────────────────────────────────────
-//  BIENVENUE
-// ─────────────────────────────────────────────
+// ── BIENVENUE ─────────────────────────────────────────────────────────────────
 client.on('guildMemberAdd', async (member) => {
   const roleNames = ['Membre', '🐒 Bébé Singe'];
   for (const name of roleNames) {
@@ -238,9 +209,7 @@ client.on('guildMemberAdd', async (member) => {
   channel.send({ embeds: [embed] });
 });
 
-// ─────────────────────────────────────────────
-//  XP PAR MESSAGE
-// ─────────────────────────────────────────────
+// ── XP PAR MESSAGE ────────────────────────────────────────────────────────────
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   const now = Date.now();
@@ -258,24 +227,19 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// ─────────────────────────────────────────────
-//  INTERACTIONS (SLASH COMMANDS + BOUTONS)
-// ─────────────────────────────────────────────
+// ── INTERACTIONS ──────────────────────────────────────────────────────────────
 client.on('interactionCreate', async (interaction) => {
 
-  // ── BOUTONS ──────────────────────────────────
+  // BOUTONS
   if (interaction.isButton()) {
-
     if (interaction.customId === 'create_ticket') {
       const guild = interaction.guild;
       const user  = interaction.user;
       const existing = guild.channels.cache.find(c => c.name === `ticket-${user.username.toLowerCase()}`);
       if (existing) return interaction.reply({ content: `❌ Tu as déjà un ticket ouvert : ${existing}`, ephemeral: true });
-
       const adminRole      = guild.roles.cache.find(r => r.name === 'Admin');
       const ticketCategory = guild.channels.cache.find(c => c.name.toLowerCase() === 'ticket' && c.type === ChannelType.GuildCategory);
-
-      const ticketChannel = await guild.channels.create({
+      const ticketChannel  = await guild.channels.create({
         name: `ticket-${user.username.toLowerCase()}`,
         type: ChannelType.GuildText,
         parent: ticketCategory?.id || null,
@@ -285,9 +249,7 @@ client.on('interactionCreate', async (interaction) => {
           ...(adminRole ? [{ id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }] : [])
         ]
       }).catch(err => { console.error('Erreur création ticket:', err.message); return null; });
-
       if (!ticketChannel) return interaction.reply({ content: '❌ Erreur lors de la création du ticket.', ephemeral: true });
-
       const closeRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 Fermer le ticket').setStyle(ButtonStyle.Danger)
       );
@@ -296,16 +258,12 @@ client.on('interactionCreate', async (interaction) => {
         .setTitle(`🎫 Ticket de ${user.username}`)
         .setDescription(`Bonjour ${user} ! L'équipe va te répondre rapidement.\nExplique ton problème ci-dessous.`)
         .setTimestamp();
-
       await ticketChannel.send({ embeds: [ticketEmbed], components: [closeRow] });
-
       const modChannel = guild.channels.cache.find(c =>
-        c.name.toLowerCase() === 'ticket' &&
-        c.type === ChannelType.GuildText &&
+        c.name.toLowerCase() === 'ticket' && c.type === ChannelType.GuildText &&
         (c.parent?.name?.toLowerCase() === 'modération' || c.parent?.name?.toLowerCase() === 'moderation')
       );
       if (modChannel) modChannel.send(`📋 Nouveau ticket créé par **${user.tag}** → ${ticketChannel}`);
-
       return interaction.reply({ content: `✅ Ton ticket a été créé : ${ticketChannel}`, ephemeral: true });
     }
 
@@ -313,31 +271,28 @@ client.on('interactionCreate', async (interaction) => {
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
         return interaction.reply({ content: '❌ Seuls les admins peuvent fermer un ticket.', ephemeral: true });
       await interaction.reply('🔒 Fermeture du ticket dans 5 secondes...');
-      setTimeout(() => interaction.channel.delete().catch(err => console.error('Erreur suppression ticket:', err.message)), 5000);
+      setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
-
     return;
   }
 
-  // ── SLASH COMMANDS ───────────────────────────
+  // SLASH COMMANDS
   if (!interaction.isChatInputCommand()) return;
   const cmd = interaction.commandName;
 
-  // /aide
   if (cmd === 'aide') {
     const embed = new EmbedBuilder()
       .setColor(0x2C2F33)
       .setTitle('📋 Commandes disponibles')
       .addFields(
-        { name: '👋 Général',           value: '`/aide` `/rang` `/classement`' },
+        { name: '👋 Général',            value: '`/aide` `/rang` `/lb`' },
         { name: '🛡️ Modération (admin)', value: '`/kick` `/ban` `/mute`' },
-        { name: '⭐ XP (admin)',         value: '`/givexp` `/removexp`' },
-        { name: '🎫 Ticket (admin)',     value: '`/setup-ticket`' }
+        { name: '⭐ XP (admin)',          value: '`/givexp` `/removexp`' },
+        { name: '🎫 Ticket (admin)',      value: '`/setup-ticket`' }
       );
     return interaction.reply({ embeds: [embed] });
   }
 
-  // /rang
   if (cmd === 'rang') {
     const target = interaction.options.getUser('membre') || interaction.user;
     const stats  = await getStats(target.id);
@@ -349,14 +304,13 @@ client.on('interactionCreate', async (interaction) => {
       .setTitle(`📊 Rang de ${stats.username}`)
       .setThumbnail(target.displayAvatarURL({ dynamic: true }))
       .addFields(
-        { name: '⭐ Niveau',      value: `**${stats.level}**`,                       inline: true },
-        { name: '✨ XP',          value: `**${stats.xp}** / ${nextLevelXP} XP`,      inline: true },
+        { name: '⭐ Niveau',      value: `**${stats.level}**`,                  inline: true },
+        { name: '✨ XP',          value: `**${stats.xp}** / ${nextLevelXP} XP`, inline: true },
         { name: '📈 Progression', value: `**${percent}%** vers le niveau suivant` }
       );
     return interaction.reply({ embeds: [embed] });
   }
 
-  // /classement et /lb
   if (cmd === 'lb') {
     const top = await getLeaderboard();
     if (!top.length) return interaction.reply({ content: '❌ Aucun classement pour l\'instant.', ephemeral: true });
@@ -371,7 +325,6 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ embeds: [embed] });
   }
 
-  // /kick
   if (cmd === 'kick') {
     const member = interaction.options.getMember('membre');
     const raison = interaction.options.getString('raison') || 'Aucune raison fournie';
@@ -380,7 +333,6 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ content: `✅ **${member.user.tag}** a été expulsé. Raison : ${raison}` });
   }
 
-  // /ban
   if (cmd === 'ban') {
     const member = interaction.options.getMember('membre');
     const raison = interaction.options.getString('raison') || 'Aucune raison fournie';
@@ -389,7 +341,6 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ content: `✅ **${member.user.tag}** a été banni. Raison : ${raison}` });
   }
 
-  // /mute
   if (cmd === 'mute') {
     const member = interaction.options.getMember('membre');
     if (!member) return interaction.reply({ content: '❌ Membre introuvable.', ephemeral: true });
@@ -397,7 +348,6 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ content: `✅ **${member.user.tag}** est mute pour 10 minutes.` });
   }
 
-  // /givexp
   if (cmd === 'givexp') {
     const target = interaction.options.getUser('membre');
     const amount = interaction.options.getInteger('montant');
@@ -407,7 +357,6 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ content: `✅ **+${amount} XP** donné à ${target.username} ! (Total : ${result.xp} XP — Niveau ${result.level})` });
   }
 
-  // /removexp
   if (cmd === 'removexp') {
     const target = interaction.options.getUser('membre');
     const amount = interaction.options.getInteger('montant');
@@ -418,7 +367,6 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ content: `✅ **-${amount} XP** retiré à ${target.username} ! (Total : ${result.xp} XP — Niveau ${result.level})` });
   }
 
-  // /setup-ticket
   if (cmd === 'setup-ticket') {
     const embed = new EmbedBuilder()
       .setColor(0x2C2F33)
@@ -431,16 +379,13 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ content: '✅ Panneau de tickets installé !', ephemeral: true });
   }
 
-// ─────────────────────────────────────────────
-//  SERVEUR HTTP (KEEP ALIVE POUR RAILWAY)
-// ─────────────────────────────────────────────
+}); // ← fermeture interactionCreate
+
+// ── SERVEUR HTTP ──────────────────────────────────────────────────────────────
 const http = require('http');
 http.createServer((req, res) => {
   res.writeHead(200);
   res.end('Bot en ligne !');
 }).listen(process.env.PORT || 3000);
 
-// ─────────────────────────────────────────────
-//  CONNEXION
-// ─────────────────────────────────────────────
 client.login(TOKEN);
