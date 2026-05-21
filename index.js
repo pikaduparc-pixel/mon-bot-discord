@@ -97,6 +97,10 @@ const slashCommands = [
     .setDescription('Affiche le top 10 du serveur'),
 
   new SlashCommandBuilder()
+    .setName('lb')
+    .setDescription('Affiche le top 10 du serveur'),
+
+  new SlashCommandBuilder()
     .setName('kick')
     .setDescription('Expulse un membre du serveur')
     .addUserOption(opt =>
@@ -144,10 +148,6 @@ const slashCommands = [
     .setDescription('Installe le panneau de tickets dans ce salon (admin)')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
 
-  new SlashCommandBuilder()
-    .setName('migrate')
-    .setDescription('Restaure les données XP des membres (admin)')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator),
 
 ].map(cmd => cmd.toJSON());
 
@@ -356,8 +356,8 @@ client.on('interactionCreate', async (interaction) => {
     return interaction.reply({ embeds: [embed] });
   }
 
-  // /classement
-  if (cmd === 'classement') {
+  // /classement et /lb
+  if (cmd === 'classement' || cmd === 'lb') {
     const top = await getLeaderboard();
     if (!top.length) return interaction.reply({ content: '❌ Aucun classement pour l\'instant.', ephemeral: true });
     const medals = ['🥇', '🥈', '🥉'];
@@ -430,15 +430,7 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.channel.send({ embeds: [embed], components: [row] });
     return interaction.reply({ content: '✅ Panneau de tickets installé !', ephemeral: true });
   }
-
-  // /migrate
-  if (cmd === 'migrate') {
-    await interaction.reply({ content: '⏳ Migration en cours...', ephemeral: true });
-    await runMigration();
-    return interaction.editReply({ content: '✅ Migration terminée ! 16 membres restaurés.' });
-  }
-});
-
+  
 // ─────────────────────────────────────────────
 //  SERVEUR HTTP (KEEP ALIVE POUR RAILWAY)
 // ─────────────────────────────────────────────
