@@ -161,7 +161,7 @@ client.once('ready', async () => {
       if (!member) continue;
       if (!member.voice.channel) { voiceTracker.delete(userId); continue; }
       if (member.voice.selfMute || member.voice.selfDeaf) continue;
-      const result = await addXP(userId, member.user.username, 30);
+      const result = await addXP(userId, member.displayName, 30);
       await updateRoles(member, result.level);
       if (result.leveledUp) {
         const channel = guild.channels.cache.find(c => c.name === '⚡levels');
@@ -216,7 +216,7 @@ client.on('messageCreate', async (message) => {
   const lastMessage = cooldowns.get(message.author.id) || 0;
   if (now - lastMessage > 60 * 1000) {
     const xpGagné = Math.floor(Math.random() * 11) + 15;
-    const result = await addXP(message.author.id, message.author.username, xpGagné);
+    const result = await addXP(message.author.id, message.member?.displayName || message.author.username, xpGagné);
     cooldowns.set(message.author.id, now);
     const member = await message.guild.members.fetch(message.author.id).catch(() => null);
     if (member) await updateRoles(member, result.level);
