@@ -25,6 +25,9 @@ const {
   resetAll
 } = require('./xp');
 
+const { musicCommands, handleMusicCommand } = require('./music-commands');
+const queue = require('./queue');
+
 const TOKEN     = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID  = process.env.GUILD_ID;
@@ -70,7 +73,7 @@ async function updateRoles(member, level) {
   }
 }
 
-// ── SLASH COMMANDS ────────────────────────────────────────────────────────────
+// ── SLASH COMMANDS ─────────────────────────────────────────────────────────[...]
 const slashCommands = [
   new SlashCommandBuilder()
     .setName('aide')
@@ -136,18 +139,21 @@ const slashCommands = [
 
 ].map(cmd => cmd.toJSON());
 
+// Ajouter les commandes musicales
+const allCommands = [...slashCommands, ...musicCommands];
+
 async function deployCommands() {
   const rest = new REST({ version: '10' }).setToken(TOKEN);
   try {
     console.log('🔄 Enregistrement des slash commands...');
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: slashCommands });
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: allCommands });
     console.log('✅ Slash commands enregistrées !');
   } catch (err) {
     console.error('❌ Erreur enregistrement commands :', err);
   }
 }
 
-// ── READY ─────────────────────────────────────────────────────────────────────
+// ── READY ───────────────────────────────────────────────────────────[...]
 client.once('ready', async () => {
   console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
   await connectDB();
@@ -161,7 +167,8 @@ client.once('ready', async () => {
       if (!member) continue;
       if (!member.voice.channel) { voiceTracker.delete(userId); continue; }
       if (member.voice.selfMute || member.voice.selfDeaf) continue;
-      const result = await addXP(userId, member.displayName, 30);
+      // XP REBALANCÉ : 30 XP → 8 XP toutes les 5 minutes (pour ~1 an de progression)
+      const result = await addXP(userId, member.displayName, 8);
       await updateRoles(member, result.level);
       if (result.leveledUp) {
         const channel = guild.channels.cache.find(c => c.name === '⚡levels');
@@ -183,14 +190,14 @@ client.once('ready', async () => {
   }, 60 * 1000);
 });
 
-// ── VOCAL ─────────────────────────────────────────────────────────────────────
+// ── VOCAL ───────────────────────────────────────────────────────────[...]
 client.on('voiceStateUpdate', (oldState, newState) => {
   const userId = newState.id;
   if (!oldState.channelId && newState.channelId) voiceTracker.set(userId, Date.now());
   if (oldState.channelId && !newState.channelId) voiceTracker.delete(userId);
 });
 
-// ── BIENVENUE ─────────────────────────────────────────────────────────────────
+// ── BIENVENUE ──────────────────────────────────────────────────────────[...]
 client.on('guildMemberAdd', async (member) => {
   const roleNames = ['Membre', '🐒 Bébé Singe'];
   for (const name of roleNames) {
@@ -209,13 +216,14 @@ client.on('guildMemberAdd', async (member) => {
   channel.send({ embeds: [embed] });
 });
 
-// ── XP PAR MESSAGE ────────────────────────────────────────────────────────────
+// ── XP PAR MESSAGE ────────────────────────────────────────────────────────[...]
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   const now = Date.now();
   const lastMessage = cooldowns.get(message.author.id) || 0;
   if (now - lastMessage > 60 * 1000) {
-    const xpGagné = Math.floor(Math.random() * 11) + 15;
+    // XP REBALANCÉ : 15-25 XP → 5-10 XP par message (pour ~1 an de progression)
+    const xpGagné = Math.floor(Math.random() * 6) + 5;
     const result = await addXP(message.author.id, message.member?.displayName || message.author.username, xpGagné);
     cooldowns.set(message.author.id, now);
     const member = await message.guild.members.fetch(message.author.id).catch(() => null);
@@ -227,7 +235,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// ── INTERACTIONS ──────────────────────────────────────────────────────────────
+// ── INTERACTIONS ─────────────────────────────────────────────────────────[...]
 client.on('interactionCreate', async (interaction) => {
 
   // BOUTONS
@@ -280,6 +288,12 @@ client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
   const cmd = interaction.commandName;
 
+  // Vérifier si c'est une commande musicale
+  const musicCommandNames = ['play', 'pause', 'resume', 'skip', 'stop', 'queue', 'nowplaying', 'loop'];
+  if (musicCommandNames.includes(cmd)) {
+    return await handleMusicCommand(interaction);
+  }
+
   if (cmd === 'aide') {
     const embed = new EmbedBuilder()
       .setColor(0x2C2F33)
@@ -288,7 +302,8 @@ client.on('interactionCreate', async (interaction) => {
         { name: '👋 Général',            value: '`/aide` `/rang` `/lb`' },
         { name: '🛡️ Modération (admin)', value: '`/kick` `/ban` `/mute`' },
         { name: '⭐ XP (admin)',          value: '`/givexp` `/removexp`' },
-        { name: '🎫 Ticket (admin)',      value: '`/setup-ticket`' }
+        { name: '🎫 Ticket (admin)',      value: '`/setup-ticket`' },
+        { name: '🎵 Musique',             value: '`/play` `/pause` `/resume` `/skip` `/stop` `/queue` `/nowplaying` `/loop`' }
       );
     return interaction.reply({ embeds: [embed] });
   }
@@ -381,7 +396,7 @@ client.on('interactionCreate', async (interaction) => {
 
 }); // ← fermeture interactionCreate
 
-// ── SERVEUR HTTP ──────────────────────────────────────────────────────────────
+// ── SERVEUR HTTP ─────────────────────────────────────────────────────────[...]
 const http = require('http');
 http.createServer((req, res) => {
   res.writeHead(200);
