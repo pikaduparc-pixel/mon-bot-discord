@@ -70,7 +70,7 @@ async function updateRoles(member, level) {
   }
 }
 
-// ── SLASH COMMANDS ────────────────────────────────────────────────────────────
+// ── SLASH COMMANDS ─────────────────────────────────────────────────────────[...]
 const slashCommands = [
   new SlashCommandBuilder()
     .setName('aide')
@@ -147,7 +147,7 @@ async function deployCommands() {
   }
 }
 
-// ── READY ─────────────────────────────────────────────────────────────────────
+// ── READY ─────────────────────────────────────────────────────────────[...]
 client.once('ready', async () => {
   console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
   await connectDB();
@@ -161,7 +161,8 @@ client.once('ready', async () => {
       if (!member) continue;
       if (!member.voice.channel) { voiceTracker.delete(userId); continue; }
       if (member.voice.selfMute || member.voice.selfDeaf) continue;
-      const result = await addXP(userId, member.displayName, 30);
+      // XP REBALANCÉ : 30 XP → 8 XP toutes les 5 minutes (pour ~1 an de progression)
+      const result = await addXP(userId, member.displayName, 8);
       await updateRoles(member, result.level);
       if (result.leveledUp) {
         const channel = guild.channels.cache.find(c => c.name === '⚡levels');
@@ -183,14 +184,14 @@ client.once('ready', async () => {
   }, 60 * 1000);
 });
 
-// ── VOCAL ─────────────────────────────────────────────────────────────────────
+// ── VOCAL ─────────────────────────────────────────────────────────────[...]
 client.on('voiceStateUpdate', (oldState, newState) => {
   const userId = newState.id;
   if (!oldState.channelId && newState.channelId) voiceTracker.set(userId, Date.now());
   if (oldState.channelId && !newState.channelId) voiceTracker.delete(userId);
 });
 
-// ── BIENVENUE ─────────────────────────────────────────────────────────────────
+// ── BIENVENUE ──────────────────────────────────────────────────────────–[...]
 client.on('guildMemberAdd', async (member) => {
   const roleNames = ['Membre', '🐒 Bébé Singe'];
   for (const name of roleNames) {
@@ -209,13 +210,14 @@ client.on('guildMemberAdd', async (member) => {
   channel.send({ embeds: [embed] });
 });
 
-// ── XP PAR MESSAGE ────────────────────────────────────────────────────────────
+// ── XP PAR MESSAGE ────────────────────────────────────────────────────────––[...]
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
   const now = Date.now();
   const lastMessage = cooldowns.get(message.author.id) || 0;
   if (now - lastMessage > 60 * 1000) {
-    const xpGagné = Math.floor(Math.random() * 11) + 15;
+    // XP REBALANCÉ : 15-25 XP → 5-10 XP par message (pour ~1 an de progression)
+    const xpGagné = Math.floor(Math.random() * 6) + 5;
     const result = await addXP(message.author.id, message.member?.displayName || message.author.username, xpGagné);
     cooldowns.set(message.author.id, now);
     const member = await message.guild.members.fetch(message.author.id).catch(() => null);
@@ -227,7 +229,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// ── INTERACTIONS ──────────────────────────────────────────────────────────────
+// ── INTERACTIONS ─────────────────────────────────────────────────────────–[...]
 client.on('interactionCreate', async (interaction) => {
 
   // BOUTONS
@@ -381,7 +383,7 @@ client.on('interactionCreate', async (interaction) => {
 
 }); // ← fermeture interactionCreate
 
-// ── SERVEUR HTTP ──────────────────────────────────────────────────────────────
+// ── SERVEUR HTTP ─────────────────────────────────────────────────────────–[...]
 const http = require('http');
 http.createServer((req, res) => {
   res.writeHead(200);
