@@ -31,21 +31,26 @@ async function handlePlayCommand(interaction, args) {
   const query = Array.isArray(args) ? args.join(' ') : interaction.options.getString('chanson');
   await interaction.deferReply();
 
-  const song = await searchSong(query);
-  if (!song) return interaction.editReply('❌ Aucun résultat trouvé. Essaie un autre nom ou un lien YouTube.');
-
-  const result = await addAndPlay(interaction.guildId, song, interaction.member, interaction.channel);
-
-  if (!result.ok) {
-    return interaction.editReply(`❌ ${result.error}`);
+  let song;
+  try {
+    song = await searchSong(query);
+  } catch (err) {
+    return interaction.editReply(`❌ Erreur de recherche : ${err.message}`);
   }
 
-  if (result.queued) {
-    return interaction.editReply(`✅ **${song.title}** ajouté à la queue !`);
+  if (!song) return interaction.editReply('❌ Aucun résultat trouvé.');
+  if (song.error) return interaction.editReply(`❌ ${song.error}`);
+
+  let result;
+  try {
+    result = await addAndPlay(interaction.guildId, song, interaction.member, interaction.channel);
+  } catch (err) {
+    return interaction.editReply(`❌ Erreur de lecture : ${err.message}`);
   }
 
-  // Lecture lancée — la réponse embed est envoyée dans le salon par playSong
-  return interaction.editReply({ content: `▶️ Lecture de **${song.title}** lancée !` });
+  if (!result.ok) return interaction.editReply(`❌ ${result.error}`);
+  if (result.queued) return interaction.editReply(`✅ **${song.title}** ajouté à la queue !`);
+  return interaction.editReply(`▶️ Lecture de **${song.title}** lancée !`);
 }
 
 async function handleSkipCommand(interaction) {
