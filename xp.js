@@ -18,9 +18,9 @@ async function connect() {
   }
 }
 
-// XP requis par niveau — courbe lente (niveau 100 ≈ 500 000 XP)
+// XP requis par niveau (formule originale conservée pour ne pas casser les niveaux existants)
 function xpForLevel(level) {
-  return Math.floor(100 * Math.pow(level, 2.1));
+  return Math.floor(27 * Math.pow(level, 1.8));
 }
 
 function getLevel(xp) {
