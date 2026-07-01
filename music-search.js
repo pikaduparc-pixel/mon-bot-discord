@@ -1,45 +1,33 @@
-const playdl = require('play-dl');
-
-// Timeout helper
-function withTimeout(promise, ms, msg) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(msg)), ms))
-  ]);
-}
+const axios = require('axios');
 
 async function searchSong(query) {
   try {
-    let url = query;
+    // Recherche via l'API publique Deezer (pas d'IP block contrairement à YouTube)
+    const response = await axios.get('https://api.deezer.com/search', {
+      params: { q: query, limit: 5 },
+      timeout: 8000
+    });
 
-    if (!query.startsWith('http')) {
-      const results = await withTimeout(
-        playdl.search(query, { limit: 1 }),
-        10000,
-        'Recherche trop longue — YouTube bloque peut-être les requêtes depuis Render'
-      );
-      if (!results || results.length === 0) return { error: 'Aucun résultat trouvé.' };
-      url = results[0].url;
-    }
+    const tracks = response.data?.data;
+    if (!tracks || tracks.length === 0) return { error: 'Aucune chanson trouvée sur Deezer.' };
 
-    const info = await withTimeout(
-      playdl.video_info(url),
-      10000,
-      'Récupération des infos trop longue — YouTube bloque peut-être les requêtes'
-    );
-    const v = info.video_details;
+    // Préfère un track avec preview disponible
+    const track = tracks.find(t => t.preview) || tracks[0];
+    if (!track.preview) return { error: 'Aucune preview disponible pour cette chanson.' };
 
     return {
-      url: v.url,
-      title: v.title || 'Titre inconnu',
-      artist: v.channel?.name || 'Inconnu',
-      duration: v.durationInSec || 0,
-      cover: v.thumbnails?.[v.thumbnails.length - 1]?.url || null,
+      url: track.preview,           // MP3 direct (30s)
+      pageUrl: track.link,
+      title: track.title,
+      artist: track.artist.name,
+      album: track.album.title,
+      duration: Math.min(track.duration, 30), // preview = 30s
+      cover: track.album.cover_big,
       requestedBy: null
     };
   } catch (err) {
-    console.error('Erreur recherche:', err.message);
-    return { error: err.message };
+    console.error('Erreur Deezer:', err.message);
+    return { error: `Erreur de recherche : ${err.message}` };
   }
 }
 
