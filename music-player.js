@@ -7,7 +7,11 @@ const {
   getVoiceConnection
 } = require('@discordjs/voice');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const axios = require('axios');
+
+// S'assurer que ffmpeg-static est utilisé
+try {
+  process.env.FFMPEG_PATH = require('ffmpeg-static');
+} catch (e) {}
 
 const guildStates = new Map();
 
@@ -38,7 +42,7 @@ function createNowPlayingEmbed(song, requestedBy) {
     .setColor(0xFF6B00)
     .setAuthor({ name: '🎵 En cours de lecture — Preview Deezer (30s)' })
     .setTitle(song.title)
-    .setURL(song.pageUrl || song.url)
+    .setURL(song.pageUrl || 'https://deezer.com')
     .addFields(
       { name: '👤 Artiste', value: song.artist, inline: true },
       { name: '💿 Album', value: song.album || 'Inconnu', inline: true },
@@ -88,17 +92,15 @@ async function playSong(guildId) {
   state.nowPlaying = song;
 
   try {
-    // Stream le MP3 directement depuis l'URL Deezer
-    const response = await axios.get(song.url, {
-      responseType: 'stream',
-      timeout: 10000
-    });
+    console.log(`[Music] Lecture: ${song.title} | URL: ${song.url}`);
 
-    const resource = createAudioResource(response.data, {
+    // Passer l'URL directement — ffmpeg gère les URLs HTTP nativement
+    const resource = createAudioResource(song.url, {
       inputType: StreamType.Arbitrary,
     });
 
     state.player.play(resource);
+    console.log(`[Music] Player démarré pour: ${song.title}`);
 
     if (state.textChannel) {
       state.textChannel.send({
@@ -108,7 +110,7 @@ async function playSong(guildId) {
     }
     return true;
   } catch (err) {
-    console.error('Erreur lecture:', err.message);
+    console.error('[Music] Erreur lecture:', err.message, err.stack);
     if (state.textChannel) {
       state.textChannel.send(`❌ Impossible de lire **${song.title}** : ${err.message.slice(0, 100)}`).catch(() => {});
     }
@@ -127,6 +129,7 @@ function setupPlayer(guildId) {
   state.player.removeAllListeners();
 
   state.player.on(AudioPlayerStatus.Idle, () => {
+    console.log(`[Music] Idle — loop:${state.loop} queue:${state.queue.length}`);
     if (state.loop && state.nowPlaying) {
       playSong(guildId);
     } else {
@@ -135,9 +138,13 @@ function setupPlayer(guildId) {
     }
   });
 
+  state.player.on(AudioPlayerStatus.Playing, () => {
+    console.log(`[Music] Lecture en cours: ${state.nowPlaying?.title}`);
+  });
+
   state.player.on('error', (err) => {
-    console.error('Player error:', err.message);
-    if (state.textChannel) state.textChannel.send('❌ Erreur audio.').catch(() => {});
+    console.error('[Music] Player error:', err.message);
+    if (state.textChannel) state.textChannel.send(`❌ Erreur audio: ${err.message.slice(0, 100)}`).catch(() => {});
     state.queue.shift();
     playSong(guildId);
   });
@@ -161,7 +168,9 @@ async function addAndPlay(guildId, song, member, textChannel) {
       connection.subscribe(state.player);
       state.connection = connection;
       setupPlayer(guildId);
+      console.log(`[Music] Connecté au vocal: ${member.voice.channel.name}`);
     } catch (err) {
+      console.error('[Music] Erreur connexion vocale:', err.message);
       state.queue.pop();
       return { ok: false, error: `Impossible de rejoindre le vocal : ${err.message}` };
     }
@@ -175,9 +184,13 @@ async function addAndPlay(guildId, song, member, textChannel) {
   return { ok: true, queued: true };
 }
 
-function skipSong(guildId) { getState(guildId).player.stop(); }
+function skipSong(guildId) {
+  console.log('[Music] Skip demandé');
+  getState(guildId).player.stop();
+}
 
 function stopMusic(guildId) {
+  console.log('[Music] Stop demandé');
   const state = getState(guildId);
   state.queue = [];
   state.nowPlaying = null;
