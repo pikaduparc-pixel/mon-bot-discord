@@ -9,79 +9,76 @@ async function handleMusicButton(interaction) {
     const nowPaused = togglePause(guildId);
     return interaction.reply({ content: nowPaused ? '⏸️ Musique mise en pause.' : '▶️ Musique reprise !', ephemeral: true });
   }
-
   if (id === `music_skip_${guildId}`) {
     skipSong(guildId);
     return interaction.reply({ content: '⏭️ Chanson passée !', ephemeral: true });
   }
-
   if (id === `music_loop_${guildId}`) {
     const looping = toggleLoop(guildId);
     return interaction.reply({ content: looping ? '🔁 Boucle **activée** !' : '🔁 Boucle **désactivée** !', ephemeral: true });
   }
-
   if (id === `music_stop_${guildId}`) {
     stopMusic(guildId);
-    return interaction.reply({ content: '⏹️ Musique arrêtée et queue vidée.', ephemeral: true });
+    return interaction.reply({ content: '⏹️ Musique arrêtée.', ephemeral: true });
   }
 }
 
-async function handlePlayCommand(message, args) {
-  if (!message.member.voice.channel)
-    return message.reply('❌ Tu dois être dans un canal vocal pour lancer de la musique !');
-  if (!args.length)
-    return message.reply('❌ Utilisation : `!play <nom de la chanson ou lien YouTube>`');
+// /play — interaction est une slash command
+async function handlePlayCommand(interaction, args) {
+  if (!interaction.member.voice.channel)
+    return interaction.reply({ content: '❌ Tu dois être dans un canal vocal !', ephemeral: true });
 
-  const query = args.join(' ');
-  const searching = await message.reply('🔍 Recherche en cours...');
+  const query = Array.isArray(args) ? args.join(' ') : interaction.options.getString('chanson');
+  await interaction.deferReply();
 
   const song = await searchSong(query);
-  if (!song) {
-    return searching.edit('❌ Aucun résultat trouvé. Essaie un autre nom ou un lien YouTube.');
-  }
+  if (!song) return interaction.editReply('❌ Aucun résultat trouvé. Essaie un autre nom ou un lien YouTube.');
 
-  await searching.delete().catch(() => {});
-  await addAndPlay(message.guildId, song, message.member, message.channel);
+  await addAndPlay(interaction.guildId, song, interaction.member, interaction.channel);
+
+  // La réponse est gérée dans addAndPlay via textChannel.send
+  // On répond juste pour acquitter le defer
+  return interaction.editReply('🔍 Recherche terminée !').then(m => setTimeout(() => m.delete().catch(() => {}), 2000));
 }
 
-async function handleSkipCommand(message) {
-  const state = getGuildState(message.guildId);
-  if (!state.nowPlaying) return message.reply('❌ Aucune musique en cours !');
-  skipSong(message.guildId);
-  message.reply('⏭️ Chanson passée !');
+async function handleSkipCommand(interaction) {
+  const state = getGuildState(interaction.guildId);
+  if (!state.nowPlaying) return interaction.reply({ content: '❌ Aucune musique en cours !', ephemeral: true });
+  skipSong(interaction.guildId);
+  return interaction.reply('⏭️ Chanson passée !');
 }
 
-async function handleStopCommand(message) {
-  const state = getGuildState(message.guildId);
-  if (!state.nowPlaying) return message.reply('❌ Aucune musique en cours !');
-  stopMusic(message.guildId);
-  message.reply('⏹️ Musique arrêtée et queue vidée !');
+async function handleStopCommand(interaction) {
+  const state = getGuildState(interaction.guildId);
+  if (!state.nowPlaying) return interaction.reply({ content: '❌ Aucune musique en cours !', ephemeral: true });
+  stopMusic(interaction.guildId);
+  return interaction.reply('⏹️ Musique arrêtée et queue vidée !');
 }
 
-async function handleQueueCommand(message) {
-  const state = getGuildState(message.guildId);
+async function handleQueueCommand(interaction) {
+  const state = getGuildState(interaction.guildId);
   const embed = createQueueEmbed(state.queue, state.nowPlaying);
-  message.reply({ embeds: [embed] });
+  return interaction.reply({ embeds: [embed] });
 }
 
-async function handleNowPlayingCommand(message) {
-  const state = getGuildState(message.guildId);
-  if (!state.nowPlaying) return message.reply('❌ Aucune musique en cours !');
+async function handleNowPlayingCommand(interaction) {
+  const state = getGuildState(interaction.guildId);
+  if (!state.nowPlaying) return interaction.reply({ content: '❌ Aucune musique en cours !', ephemeral: true });
   const embed = createNowPlayingEmbed(state.nowPlaying, state.nowPlaying.requestedBy);
-  const buttons = createControlButtons(message.guildId);
-  message.reply({ embeds: [embed], components: [buttons] });
+  const buttons = createControlButtons(interaction.guildId);
+  return interaction.reply({ embeds: [embed], components: [buttons] });
 }
 
-async function handlePauseCommand(message) {
-  const state = getGuildState(message.guildId);
-  if (!state.nowPlaying) return message.reply('❌ Aucune musique en cours !');
-  const nowPaused = togglePause(message.guildId);
-  message.reply(nowPaused ? '⏸️ Musique mise en pause.' : '▶️ Musique reprise !');
+async function handlePauseCommand(interaction) {
+  const state = getGuildState(interaction.guildId);
+  if (!state.nowPlaying) return interaction.reply({ content: '❌ Aucune musique en cours !', ephemeral: true });
+  const nowPaused = togglePause(interaction.guildId);
+  return interaction.reply(nowPaused ? '⏸️ Musique mise en pause.' : '▶️ Musique reprise !');
 }
 
-async function handleLoopCommand(message) {
-  const looping = toggleLoop(message.guildId);
-  message.reply(looping ? '🔁 Boucle **activée** !' : '🔁 Boucle **désactivée** !');
+async function handleLoopCommand(interaction) {
+  const looping = toggleLoop(interaction.guildId);
+  return interaction.reply(looping ? '🔁 Boucle **activée** !' : '🔁 Boucle **désactivée** !');
 }
 
 module.exports = {
