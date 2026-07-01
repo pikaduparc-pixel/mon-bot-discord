@@ -2,11 +2,12 @@ const {
   createAudioPlayer,
   createAudioResource,
   AudioPlayerStatus,
+  StreamType,
   joinVoiceChannel,
   getVoiceConnection
 } = require('@discordjs/voice');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const playdl = require('play-dl');
+const axios = require('axios');
 
 const guildStates = new Map();
 
@@ -27,28 +28,25 @@ function getState(guildId) {
 }
 
 function formatDuration(seconds) {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function createNowPlayingEmbed(song, requestedBy) {
-  const embed = new EmbedBuilder()
+  return new EmbedBuilder()
     .setColor(0xFF6B00)
-    .setAuthor({ name: '🎵 En cours de lecture' })
+    .setAuthor({ name: '🎵 En cours de lecture — Preview Deezer (30s)' })
     .setTitle(song.title)
-    .setURL(song.url)
+    .setURL(song.pageUrl || song.url)
     .addFields(
-      { name: '👤 Chaîne', value: song.artist, inline: true },
-      { name: '⏱️ Durée', value: formatDuration(song.duration), inline: true },
+      { name: '👤 Artiste', value: song.artist, inline: true },
+      { name: '💿 Album', value: song.album || 'Inconnu', inline: true },
       { name: '📩 Demandé par', value: requestedBy ? `<@${requestedBy}>` : 'Inconnu', inline: true }
     )
-    .setFooter({ text: 'Utilise /queue pour voir la file d\'attente' })
-    .setTimestamp();
-  if (song.cover) embed.setThumbnail(song.cover);
-  return embed;
+    .setFooter({ text: 'Preview 30s via Deezer • /queue pour voir la file' })
+    .setTimestamp()
+    .setThumbnail(song.cover || null);
 }
 
 function createControlButtons(guildId) {
@@ -62,19 +60,18 @@ function createControlButtons(guildId) {
 
 function createQueueEmbed(queue, nowPlaying) {
   const lines = queue.slice(0, 10).map((s, i) =>
-    `**${i + 1}.** [${s.title}](${s.url}) — ${formatDuration(s.duration)}`
+    `**${i + 1}.** ${s.title} — ${s.artist} (${formatDuration(s.duration)})`
   );
   return new EmbedBuilder()
     .setColor(0xFF6B00)
     .setTitle('🎵 File d\'attente')
     .setDescription(
-      (nowPlaying ? `**▶️ En cours :** [${nowPlaying.title}](${nowPlaying.url})\n\n` : '') +
+      (nowPlaying ? `**▶️ En cours :** ${nowPlaying.title} — ${nowPlaying.artist}\n\n` : '') +
       (lines.length ? lines.join('\n') : '*Queue vide*')
     )
     .setFooter({ text: `${queue.length} chanson(s) en attente` });
 }
 
-// Retourne true si succès, false si échec
 async function playSong(guildId) {
   const state = getState(guildId);
 
@@ -91,8 +88,16 @@ async function playSong(guildId) {
   state.nowPlaying = song;
 
   try {
-    const stream = await playdl.stream(song.url);
-    const resource = createAudioResource(stream.stream, { inputType: stream.type });
+    // Stream le MP3 directement depuis l'URL Deezer
+    const response = await axios.get(song.url, {
+      responseType: 'stream',
+      timeout: 10000
+    });
+
+    const resource = createAudioResource(response.data, {
+      inputType: StreamType.Arbitrary,
+    });
+
     state.player.play(resource);
 
     if (state.textChannel) {
@@ -104,14 +109,11 @@ async function playSong(guildId) {
     return true;
   } catch (err) {
     console.error('Erreur lecture:', err.message);
-    // Informe le salon de l'erreur
     if (state.textChannel) {
-      state.textChannel.send(`❌ Impossible de lire **${song.title}** : ${err.message.slice(0, 100)}\nEssaie un autre lien ou chanson.`).catch(() => {});
+      state.textChannel.send(`❌ Impossible de lire **${song.title}** : ${err.message.slice(0, 100)}`).catch(() => {});
     }
-    // Retire la chanson problématique et continue
     state.queue.shift();
     if (state.queue.length > 0) return playSong(guildId);
-
     state.nowPlaying = null;
     const conn = getVoiceConnection(guildId);
     if (conn) conn.destroy();
@@ -135,15 +137,12 @@ function setupPlayer(guildId) {
 
   state.player.on('error', (err) => {
     console.error('Player error:', err.message);
-    if (state.textChannel) {
-      state.textChannel.send('❌ Erreur audio. Passage à la chanson suivante...').catch(() => {});
-    }
+    if (state.textChannel) state.textChannel.send('❌ Erreur audio.').catch(() => {});
     state.queue.shift();
     playSong(guildId);
   });
 }
 
-// Retourne { ok, error } 
 async function addAndPlay(guildId, song, member, textChannel) {
   const state = getState(guildId);
   state.textChannel = textChannel;
@@ -170,16 +169,13 @@ async function addAndPlay(guildId, song, member, textChannel) {
 
   if (wasEmpty) {
     const ok = await playSong(guildId);
-    return { ok, error: ok ? null : 'Erreur lors de la lecture. Essaie un autre lien.' };
+    return { ok, error: ok ? null : 'Erreur lors de la lecture.' };
   }
 
   return { ok: true, queued: true };
 }
 
-function skipSong(guildId) {
-  const state = getState(guildId);
-  state.player.stop();
-}
+function skipSong(guildId) { getState(guildId).player.stop(); }
 
 function stopMusic(guildId) {
   const state = getState(guildId);
@@ -194,15 +190,8 @@ function stopMusic(guildId) {
 
 function togglePause(guildId) {
   const state = getState(guildId);
-  if (state.paused) {
-    state.player.unpause();
-    state.paused = false;
-    return false;
-  } else {
-    state.player.pause();
-    state.paused = true;
-    return true;
-  }
+  if (state.paused) { state.player.unpause(); state.paused = false; return false; }
+  else { state.player.pause(); state.paused = true; return true; }
 }
 
 function toggleLoop(guildId) {
@@ -211,19 +200,10 @@ function toggleLoop(guildId) {
   return state.loop;
 }
 
-function getGuildState(guildId) {
-  return getState(guildId);
-}
+function getGuildState(guildId) { return getState(guildId); }
 
 module.exports = {
-  addAndPlay,
-  skipSong,
-  stopMusic,
-  togglePause,
-  toggleLoop,
-  getGuildState,
-  createNowPlayingEmbed,
-  createControlButtons,
-  createQueueEmbed,
-  formatDuration
+  addAndPlay, skipSong, stopMusic, togglePause, toggleLoop,
+  getGuildState, createNowPlayingEmbed, createControlButtons,
+  createQueueEmbed, formatDuration
 };
