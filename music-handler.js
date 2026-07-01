@@ -34,11 +34,18 @@ async function handlePlayCommand(interaction, args) {
   const song = await searchSong(query);
   if (!song) return interaction.editReply('❌ Aucun résultat trouvé. Essaie un autre nom ou un lien YouTube.');
 
-  await addAndPlay(interaction.guildId, song, interaction.member, interaction.channel);
+  const result = await addAndPlay(interaction.guildId, song, interaction.member, interaction.channel);
 
-  // La réponse est gérée dans addAndPlay via textChannel.send
-  // On répond juste pour acquitter le defer
-  return interaction.editReply('🔍 Recherche terminée !').then(m => setTimeout(() => m.delete().catch(() => {}), 2000));
+  if (!result.ok) {
+    return interaction.editReply(`❌ ${result.error}`);
+  }
+
+  if (result.queued) {
+    return interaction.editReply(`✅ **${song.title}** ajouté à la queue !`);
+  }
+
+  // Lecture lancée — la réponse embed est envoyée dans le salon par playSong
+  return interaction.editReply({ content: `▶️ Lecture de **${song.title}** lancée !` });
 }
 
 async function handleSkipCommand(interaction) {
