@@ -6,7 +6,10 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChannelType
+  ChannelType,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } = require('discord.js');
 
 const {
@@ -34,10 +37,7 @@ const {
 require('dotenv').config();
 const TOKEN = process.env.DISCORD_TOKEN;
 
-// ffmpeg-static pour la lecture audio
-try {
-  process.env.FFMPEG_PATH = require('ffmpeg-static');
-} catch (e) {}
+try { process.env.FFMPEG_PATH = require('ffmpeg-static'); } catch (e) {}
 
 const client = new Client({
   intents: [
@@ -64,6 +64,61 @@ const ROLE_LEVELS = [
   { level: 100, name: '👑 Roi des Singes' },
 ];
 
+// ─── Définition de toutes les slash commands ───
+const commands = [
+  new SlashCommandBuilder().setName('bonjour').setDescription('Saluer le bot'),
+  new SlashCommandBuilder().setName('aide').setDescription('Afficher les commandes disponibles'),
+  new SlashCommandBuilder()
+    .setName('rang')
+    .setDescription('Voir ton rang ou celui d\'un membre')
+    .addUserOption(opt => opt.setName('membre').setDescription('Membre à consulter').setRequired(false)),
+  new SlashCommandBuilder().setName('classement').setDescription('Voir le classement du serveur'),
+
+  // Musique
+  new SlashCommandBuilder()
+    .setName('play')
+    .setDescription('Jouer une chanson dans le vocal')
+    .addStringOption(opt => opt.setName('chanson').setDescription('Nom ou lien YouTube').setRequired(true)),
+  new SlashCommandBuilder().setName('skip').setDescription('Passer à la chanson suivante'),
+  new SlashCommandBuilder().setName('stop').setDescription('Arrêter la musique et vider la queue'),
+  new SlashCommandBuilder().setName('pause').setDescription('Mettre en pause / reprendre'),
+  new SlashCommandBuilder().setName('queue').setDescription('Afficher la file d\'attente'),
+  new SlashCommandBuilder().setName('np').setDescription('Voir la chanson en cours'),
+  new SlashCommandBuilder().setName('loop').setDescription('Activer/désactiver la boucle'),
+
+  // Modération
+  new SlashCommandBuilder()
+    .setName('kick')
+    .setDescription('Expulser un membre')
+    .addUserOption(opt => opt.setName('membre').setDescription('Membre à expulser').setRequired(true))
+    .addStringOption(opt => opt.setName('raison').setDescription('Raison').setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('ban')
+    .setDescription('Bannir un membre')
+    .addUserOption(opt => opt.setName('membre').setDescription('Membre à bannir').setRequired(true))
+    .addStringOption(opt => opt.setName('raison').setDescription('Raison').setRequired(false)),
+  new SlashCommandBuilder()
+    .setName('mute')
+    .setDescription('Mettre un membre en timeout 10 minutes')
+    .addUserOption(opt => opt.setName('membre').setDescription('Membre à muter').setRequired(true)),
+
+  // XP admin
+  new SlashCommandBuilder()
+    .setName('givexp')
+    .setDescription('Donner de l\'XP à un membre')
+    .addUserOption(opt => opt.setName('membre').setDescription('Membre').setRequired(true))
+    .addIntegerOption(opt => opt.setName('montant').setDescription('Quantité d\'XP').setRequired(true).setMinValue(1)),
+  new SlashCommandBuilder()
+    .setName('removexp')
+    .setDescription('Retirer de l\'XP à un membre')
+    .addUserOption(opt => opt.setName('membre').setDescription('Membre').setRequired(true))
+    .addIntegerOption(opt => opt.setName('montant').setDescription('Quantité d\'XP').setRequired(true).setMinValue(1)),
+
+  // Admin
+  new SlashCommandBuilder().setName('admin-migrate').setDescription('Restaurer les données XP (admin)'),
+  new SlashCommandBuilder().setName('setup-ticket').setDescription('Créer le panneau de tickets (admin)'),
+].map(cmd => cmd.toJSON());
+
 async function updateRoles(member, level) {
   for (const roleData of ROLE_LEVELS) {
     const role = member.guild.roles.cache.find(r => r.name === roleData.name);
@@ -84,7 +139,19 @@ client.once('ready', async () => {
   console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
   await connectDB();
 
-  // XP vocal toutes les 5 minutes (réduit à 10 XP)
+  // Enregistrement des slash commands
+  try {
+    const rest = new REST({ version: '10' }).setToken(TOKEN);
+    const guild = client.guilds.cache.first();
+    if (guild) {
+      await rest.put(Routes.applicationGuildCommands(client.user.id, guild.id), { body: commands });
+      console.log('✅ Slash commands enregistrées !');
+    }
+  } catch (err) {
+    console.error('Erreur slash commands:', err.message);
+  }
+
+  // XP vocal toutes les 5 minutes
   setInterval(async () => {
     for (const [userId] of voiceTracker) {
       const guild = client.guilds.cache.first();
@@ -110,18 +177,20 @@ client.once('ready', async () => {
       const guild = client.guilds.cache.first();
       if (guild) {
         const channel = guild.channels.cache.find(c => c.name === 'général' || c.name === 'general');
-        if (channel) channel.send('🔄 Bonne année ! Les XP et niveaux ont été remis à zéro ! 🎆');
+        if (channel) channel.send('🔄 Bonne année ! Les XP ont été remis à zéro ! 🎆');
       }
     }
   }, 60 * 1000);
 });
 
+// Vocal tracking
 client.on('voiceStateUpdate', (oldState, newState) => {
   const userId = newState.id;
   if (!oldState.channelId && newState.channelId) voiceTracker.set(userId, Date.now());
   if (oldState.channelId && !newState.channelId) voiceTracker.delete(userId);
 });
 
+// Bienvenue
 client.on('guildMemberAdd', async (member) => {
   const roleNames = ['Membre', '🐒 Bébé Singe'];
   for (const name of roleNames) {
@@ -133,21 +202,20 @@ client.on('guildMemberAdd', async (member) => {
   const embed = new EmbedBuilder()
     .setColor(0x2C2F33)
     .setTitle(`👋 Bienvenue sur ${member.guild.name} !`)
-    .setDescription(`Bienvenue ${member} ! Tu es le **${member.guild.memberCount}ème** membre du serveur ! 🎉`)
+    .setDescription(`Bienvenue ${member} ! Tu es le **${member.guild.memberCount}ème** membre ! 🎉`)
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
     .setFooter({ text: 'Bonne arrivée parmi nous !' })
     .setTimestamp();
   channel.send({ embeds: [embed] });
 });
 
+// XP messages (pas de commandes en prefix)
 client.on('messageCreate', async (message) => {
-  if (message.author.bot) return;
-
-  // XP messages (réduit à 5–10 XP, cooldown 1 min)
+  if (message.author.bot || !message.guild) return;
   const now = Date.now();
   const lastMessage = cooldowns.get(message.author.id) || 0;
   if (now - lastMessage > 60 * 1000) {
-    const xpGagné = Math.floor(Math.random() * 6) + 5; // 5–10 XP
+    const xpGagné = Math.floor(Math.random() * 6) + 5;
     const result = await addXP(message.author.id, message.author.username, xpGagné);
     cooldowns.set(message.author.id, now);
     const member = await message.guild.members.fetch(message.author.id).catch(() => null);
@@ -157,35 +225,84 @@ client.on('messageCreate', async (message) => {
       if (levelChannel) levelChannel.send(`🎉 Félicitations ${message.author} ! Tu passes au niveau **${result.level}** ! 🚀`);
     }
   }
+});
 
-  if (!message.content.startsWith('!')) return;
-  const args = message.content.slice(1).trim().split(/ +/);
-  const command = args.shift().toLowerCase();
+// ─── Toutes les interactions ───
+client.on('interactionCreate', async (interaction) => {
 
-  // ─── COMMANDES GÉNÉRALES ───
-
-  if (command === 'bonjour') {
-    return message.reply(`👋 Bonjour ${message.author.username} !`);
+  // ── Boutons musique ──
+  if (interaction.isButton() && interaction.customId.startsWith('music_')) {
+    return handleMusicButton(interaction);
   }
 
-  if (command === 'aide') {
+  // ── Boutons tickets ──
+  if (interaction.isButton()) {
+    if (interaction.customId === 'create_ticket') {
+      const guild = interaction.guild;
+      const user = interaction.user;
+      const existing = guild.channels.cache.find(c => c.name === `ticket-${user.username.toLowerCase()}`);
+      if (existing) return interaction.reply({ content: `❌ Tu as déjà un ticket ouvert : ${existing}`, ephemeral: true });
+      const adminRole = guild.roles.cache.find(r => r.name === 'Admin');
+      const ticketCategory = guild.channels.cache.find(c => c.name.toLowerCase() === 'ticket' && c.type === ChannelType.GuildCategory);
+      const ticketChannel = await guild.channels.create({
+        name: `ticket-${user.username.toLowerCase()}`,
+        type: ChannelType.GuildText,
+        parent: ticketCategory?.id || null,
+        permissionOverwrites: [
+          { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+          ...(adminRole ? [{ id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }] : [])
+        ]
+      }).catch(err => { console.error('Erreur ticket:', err.message); return null; });
+      if (!ticketChannel) return interaction.reply({ content: '❌ Erreur création ticket.', ephemeral: true });
+      const closeRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 Fermer le ticket').setStyle(ButtonStyle.Danger)
+      );
+      await ticketChannel.send({
+        embeds: [new EmbedBuilder().setColor(0x2C2F33).setTitle(`🎫 Ticket de ${user.username}`).setDescription(`Bonjour ${user} ! Explique ton problème ci-dessous.`).setTimestamp()],
+        components: [closeRow]
+      });
+      return interaction.reply({ content: `✅ Ticket créé : ${ticketChannel}`, ephemeral: true });
+    }
+
+    if (interaction.customId === 'close_ticket') {
+      if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+        return interaction.reply({ content: '❌ Admins seulement.', ephemeral: true });
+      await interaction.reply('🔒 Fermeture dans 5 secondes...');
+      setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+    }
+    return;
+  }
+
+  // ── Slash commands ──
+  if (!interaction.isChatInputCommand()) return;
+  const cmd = interaction.commandName;
+
+  // /bonjour
+  if (cmd === 'bonjour') {
+    return interaction.reply(`👋 Bonjour ${interaction.user.username} !`);
+  }
+
+  // /aide
+  if (cmd === 'aide') {
     const embed = new EmbedBuilder()
       .setColor(0x2C2F33)
       .setTitle('📋 Commandes disponibles')
       .addFields(
-        { name: '👋 Général', value: '`!bonjour` `!aide` `!rang` `!rang @user` `!classement`' },
-        { name: '🎵 Musique', value: '`!play <chanson>` `!skip` `!stop` `!pause` `!queue` `!np` `!loop`' },
-        { name: '🛡️ Modération (admin)', value: '`!kick @user` `!ban @user` `!mute @user`' },
-        { name: '⭐ XP (admin)', value: '`!givexp @user [montant]` `!removexp @user [montant]`' },
-        { name: '🎫 Ticket (admin)', value: '`!setup-ticket`' }
+        { name: '👋 Général', value: '`/bonjour` `/aide` `/rang` `/classement`' },
+        { name: '🎵 Musique', value: '`/play` `/skip` `/stop` `/pause` `/queue` `/np` `/loop`' },
+        { name: '🛡️ Modération', value: '`/kick` `/ban` `/mute`' },
+        { name: '⭐ XP (admin)', value: '`/givexp` `/removexp`' },
+        { name: '🎫 Tickets (admin)', value: '`/setup-ticket`' }
       );
-    return message.reply({ embeds: [embed] });
+    return interaction.reply({ embeds: [embed] });
   }
 
-  if (command === 'rang') {
-    const target = message.mentions.users.first() || message.author;
+  // /rang
+  if (cmd === 'rang') {
+    const target = interaction.options.getUser('membre') || interaction.user;
     const stats = await getStats(target.id);
-    if (!stats) return message.reply(`❌ ${target.username} n'a pas encore d'XP !`);
+    if (!stats) return interaction.reply({ content: `❌ ${target.username} n'a pas encore d'XP !`, ephemeral: true });
     const nextLevelXP = xpForLevel(stats.level + 1);
     const progress = Math.min(Math.floor((stats.xp / nextLevelXP) * 20), 20);
     const bar = '█'.repeat(progress) + '░'.repeat(20 - progress);
@@ -198,12 +315,13 @@ client.on('messageCreate', async (message) => {
         { name: '✨ XP', value: `**${stats.xp}** / ${nextLevelXP} XP`, inline: true },
         { name: '📈 Progression', value: `\`[${bar}]\`` }
       );
-    return message.reply({ embeds: [embed] });
+    return interaction.reply({ embeds: [embed] });
   }
 
-  if (command === 'classement') {
+  // /classement
+  if (cmd === 'classement') {
     const top = await getLeaderboard();
-    if (!top.length) return message.reply('❌ Aucun classement pour l\'instant.');
+    if (!top.length) return interaction.reply({ content: '❌ Aucun classement.', ephemeral: true });
     const medals = ['🥇', '🥈', '🥉'];
     const lines = top.map(([id, data], i) =>
       `${medals[i] || `${i + 1}.`} **${data.username}** — Niveau ${data.level} (${data.xp} XP)`
@@ -212,165 +330,100 @@ client.on('messageCreate', async (message) => {
       .setColor(0x2C2F33)
       .setTitle('🏆 Classement du serveur')
       .setDescription(lines.join('\n'));
-    return message.reply({ embeds: [embed] });
+    return interaction.reply({ embeds: [embed] });
   }
 
-  // ─── COMMANDES MUSIQUE ───
+  // ── Musique ──
+  if (cmd === 'play') {
+    const args = [interaction.options.getString('chanson')];
+    return handlePlayCommand(interaction, args);
+  }
+  if (cmd === 'skip') return handleSkipCommand(interaction);
+  if (cmd === 'stop') return handleStopCommand(interaction);
+  if (cmd === 'queue') return handleQueueCommand(interaction);
+  if (cmd === 'np') return handleNowPlayingCommand(interaction);
+  if (cmd === 'pause') return handlePauseCommand(interaction);
+  if (cmd === 'loop') return handleLoopCommand(interaction);
 
-  if (command === 'play') return handlePlayCommand(message, args);
-  if (command === 'skip') return handleSkipCommand(message);
-  if (command === 'stop') return handleStopCommand(message);
-  if (command === 'queue' || command === 'file') return handleQueueCommand(message);
-  if (command === 'np' || command === 'nowplaying') return handleNowPlayingCommand(message);
-  if (command === 'pause' || command === 'resume') return handlePauseCommand(message);
-  if (command === 'loop') return handleLoopCommand(message);
-
-  // ─── MODÉRATION ───
-
-  if (command === 'kick') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.KickMembers))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    const member = message.mentions.members.first();
-    if (!member) return message.reply('❌ Mentionne un membre.');
-    await member.kick().catch(err => message.reply(`❌ Erreur: ${err.message}`));
-    return message.reply(`✅ ${member.user.tag} a été expulsé.`);
+  // ── Modération ──
+  if (cmd === 'kick') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.KickMembers))
+      return interaction.reply({ content: '❌ Permission refusée.', ephemeral: true });
+    const member = interaction.options.getMember('membre');
+    if (!member) return interaction.reply({ content: '❌ Membre introuvable.', ephemeral: true });
+    await member.kick().catch(err => interaction.reply({ content: `❌ Erreur: ${err.message}`, ephemeral: true }));
+    return interaction.reply(`✅ **${member.user.tag}** a été expulsé.`);
   }
 
-  if (command === 'ban') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.BanMembers))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    const member = message.mentions.members.first();
-    if (!member) return message.reply('❌ Mentionne un membre.');
-    await member.ban().catch(err => message.reply(`❌ Erreur: ${err.message}`));
-    return message.reply(`✅ ${member.user.tag} a été banni.`);
+  if (cmd === 'ban') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.BanMembers))
+      return interaction.reply({ content: '❌ Permission refusée.', ephemeral: true });
+    const member = interaction.options.getMember('membre');
+    if (!member) return interaction.reply({ content: '❌ Membre introuvable.', ephemeral: true });
+    await member.ban().catch(err => interaction.reply({ content: `❌ Erreur: ${err.message}`, ephemeral: true }));
+    return interaction.reply(`✅ **${member.user.tag}** a été banni.`);
   }
 
-  if (command === 'mute') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.ModerateMembers))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    const member = message.mentions.members.first();
-    if (!member) return message.reply('❌ Mentionne un membre.');
-    await member.timeout(10 * 60 * 1000).catch(err => message.reply(`❌ Erreur: ${err.message}`));
-    return message.reply(`✅ ${member.user.tag} est mute pour 10 minutes.`);
+  if (cmd === 'mute') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers))
+      return interaction.reply({ content: '❌ Permission refusée.', ephemeral: true });
+    const member = interaction.options.getMember('membre');
+    if (!member) return interaction.reply({ content: '❌ Membre introuvable.', ephemeral: true });
+    await member.timeout(10 * 60 * 1000).catch(err => interaction.reply({ content: `❌ Erreur: ${err.message}`, ephemeral: true }));
+    return interaction.reply(`✅ **${member.user.tag}** est mute pour 10 minutes.`);
   }
 
-  // ─── XP ADMIN ───
-
-  if (command === 'givexp') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    const target = message.mentions.users.first();
-    const amount = parseInt(args[1]);
-    if (!target || isNaN(amount) || amount <= 0)
-      return message.reply('❌ Utilisation : `!givexp @user [montant]`');
+  // ── XP admin ──
+  if (cmd === 'givexp') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return interaction.reply({ content: '❌ Admins seulement.', ephemeral: true });
+    const target = interaction.options.getUser('membre');
+    const amount = interaction.options.getInteger('montant');
     const result = await addXP(target.id, target.username, amount);
-    const member = await message.guild.members.fetch(target.id).catch(() => null);
+    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
     if (member) await updateRoles(member, result.level);
-    return message.reply(`✅ **+${amount} XP** donné à ${target.username} ! (Total : ${result.xp} XP — Niveau ${result.level})`);
+    return interaction.reply(`✅ **+${amount} XP** donné à ${target.username} ! (Total : ${result.xp} XP — Niveau ${result.level})`);
   }
 
-  if (command === 'removexp') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    const target = message.mentions.users.first();
-    const amount = parseInt(args[1]);
-    if (!target || isNaN(amount) || amount <= 0)
-      return message.reply('❌ Utilisation : `!removexp @user [montant]`');
+  if (cmd === 'removexp') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return interaction.reply({ content: '❌ Admins seulement.', ephemeral: true });
+    const target = interaction.options.getUser('membre');
+    const amount = interaction.options.getInteger('montant');
     const result = await removeXP(target.id, amount);
-    if (!result) return message.reply('❌ Cet utilisateur n\'a pas d\'XP.');
-    const member = await message.guild.members.fetch(target.id).catch(() => null);
+    if (!result) return interaction.reply({ content: '❌ Aucun XP trouvé.', ephemeral: true });
+    const member = await interaction.guild.members.fetch(target.id).catch(() => null);
     if (member) await updateRoles(member, result.level);
-    return message.reply(`✅ **-${amount} XP** retiré à ${target.username} ! (Total : ${result.xp} XP — Niveau ${result.level})`);
+    return interaction.reply(`✅ **-${amount} XP** retiré à ${target.username} ! (Total : ${result.xp} XP — Niveau ${result.level})`);
   }
 
-  // ─── MIGRATION ───
-
-  if (command === 'admin-migrate') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply('❌ Tu n\'as pas la permission.');
-    await message.reply('⏳ Migration en cours...');
+  // ── Admin migrate ──
+  if (cmd === 'admin-migrate') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return interaction.reply({ content: '❌ Admins seulement.', ephemeral: true });
+    await interaction.reply('⏳ Migration en cours...');
     await runMigration();
-    return message.reply('✅ Migration terminée ! 16 membres restaurés.');
+    return interaction.editReply('✅ Migration terminée ! 16 membres restaurés.');
   }
 
-  // ─── TICKETS ───
-
-  if (command === 'setup-ticket') {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return message.reply('❌ Tu n\'as pas la permission.');
+  // ── Setup ticket ──
+  if (cmd === 'setup-ticket') {
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
+      return interaction.reply({ content: '❌ Admins seulement.', ephemeral: true });
     const embed = new EmbedBuilder()
       .setColor(0x2C2F33)
       .setTitle('🎫 Créer un ticket')
-      .setDescription('Tu as besoin d\'aide ? Clique sur le bouton ci-dessous pour ouvrir un ticket avec l\'équipe.');
+      .setDescription('Clique sur le bouton ci-dessous pour ouvrir un ticket avec l\'équipe.');
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('create_ticket').setLabel('📩 Créer un ticket').setStyle(ButtonStyle.Secondary)
     );
-    await message.channel.send({ embeds: [embed], components: [row] });
-    await message.delete().catch(() => {});
-  }
-});
-
-// ─── INTERACTIONS (boutons) ───
-
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  // Boutons musique
-  if (interaction.customId.startsWith('music_')) {
-    return handleMusicButton(interaction);
-  }
-
-  // 📩 Créer un ticket
-  if (interaction.customId === 'create_ticket') {
-    const guild = interaction.guild;
-    const user = interaction.user;
-    const existing = guild.channels.cache.find(c => c.name === `ticket-${user.username.toLowerCase()}`);
-    if (existing) return interaction.reply({ content: `❌ Tu as déjà un ticket ouvert : ${existing}`, ephemeral: true });
-    const adminRole = guild.roles.cache.find(r => r.name === 'Admin');
-    const ticketCategory = guild.channels.cache.find(c => c.name.toLowerCase() === 'ticket' && c.type === ChannelType.GuildCategory);
-    const ticketChannel = await guild.channels.create({
-      name: `ticket-${user.username.toLowerCase()}`,
-      type: ChannelType.GuildText,
-      parent: ticketCategory?.id || null,
-      permissionOverwrites: [
-        { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
-        ...(adminRole ? [{ id: adminRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }] : [])
-      ]
-    }).catch(err => { console.error('Erreur création ticket:', err.message); return null; });
-
-    if (!ticketChannel) return interaction.reply({ content: '❌ Erreur lors de la création du ticket.', ephemeral: true });
-
-    const closeRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 Fermer le ticket').setStyle(ButtonStyle.Danger)
-    );
-    const ticketEmbed = new EmbedBuilder()
-      .setColor(0x2C2F33)
-      .setTitle(`🎫 Ticket de ${user.username}`)
-      .setDescription(`Bonjour ${user} ! L'équipe va te répondre rapidement.\nExplique ton problème ci-dessous.`)
-      .setTimestamp();
-    await ticketChannel.send({ embeds: [ticketEmbed], components: [closeRow] });
-
-    const modTicketChannel = guild.channels.cache.find(c =>
-      c.name.toLowerCase() === 'ticket' && c.type === ChannelType.GuildText &&
-      (c.parent?.name?.toLowerCase() === 'modération' || c.parent?.name?.toLowerCase() === 'moderation')
-    );
-    if (modTicketChannel) modTicketChannel.send(`📋 Nouveau ticket créé par **${user.tag}** → ${ticketChannel}`);
-    return interaction.reply({ content: `✅ Ton ticket a été créé : ${ticketChannel}`, ephemeral: true });
-  }
-
-  // 🔒 Fermer un ticket
-  if (interaction.customId === 'close_ticket') {
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator))
-      return interaction.reply({ content: '❌ Seuls les admins peuvent fermer un ticket.', ephemeral: true });
-    await interaction.reply('🔒 Fermeture du ticket dans 5 secondes...');
-    setTimeout(() => interaction.channel.delete().catch(err => console.error('Erreur suppression ticket:', err.message)), 5000);
+    await interaction.channel.send({ embeds: [embed], components: [row] });
+    return interaction.reply({ content: '✅ Panneau créé !', ephemeral: true });
   }
 });
 
 client.login(TOKEN);
 
-// Serveur HTTP pour Render keepalive
 const http = require('http');
 http.createServer((req, res) => { res.writeHead(200); res.end('Bot en ligne !'); })
   .listen(process.env.PORT || 3000);
