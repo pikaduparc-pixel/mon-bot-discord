@@ -8,7 +8,6 @@ const {
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const playdl = require('play-dl');
 
-// État par serveur
 const guildStates = new Map();
 
 function getState(guildId) {
@@ -46,9 +45,8 @@ function createNowPlayingEmbed(song, requestedBy) {
       { name: '⏱️ Durée', value: formatDuration(song.duration), inline: true },
       { name: '📩 Demandé par', value: requestedBy ? `<@${requestedBy}>` : 'Inconnu', inline: true }
     )
-    .setFooter({ text: 'Utilise !queue pour voir la file d\'attente' })
+    .setFooter({ text: 'Utilise /queue pour voir la file d\'attente' })
     .setTimestamp();
-
   if (song.cover) embed.setThumbnail(song.cover);
   return embed;
 }
@@ -76,44 +74,58 @@ function createQueueEmbed(queue, nowPlaying) {
     .setFooter({ text: `${queue.length} chanson(s) en attente` });
 }
 
+// Retourne true si succès, false si échec
 async function playSong(guildId) {
   const state = getState(guildId);
+
   if (state.queue.length === 0) {
     state.nowPlaying = null;
-    if (state.textChannel) state.textChannel.send('✅ Queue terminée ! Le bot quitte le vocal.');
     const conn = getVoiceConnection(guildId);
     if (conn) conn.destroy();
     state.connection = null;
-    return;
+    if (state.textChannel) state.textChannel.send('✅ Queue terminée !').catch(() => {});
+    return true;
   }
 
   const song = state.queue[0];
   state.nowPlaying = song;
 
   try {
-    const stream = await playdl.stream(song.url, { quality: 2 });
+    const stream = await playdl.stream(song.url);
     const resource = createAudioResource(stream.stream, { inputType: stream.type });
     state.player.play(resource);
 
     if (state.textChannel) {
-      const embed = createNowPlayingEmbed(song, song.requestedBy);
-      const buttons = createControlButtons(guildId);
-      state.textChannel.send({ embeds: [embed], components: [buttons] });
+      state.textChannel.send({
+        embeds: [createNowPlayingEmbed(song, song.requestedBy)],
+        components: [createControlButtons(guildId)]
+      }).catch(() => {});
     }
+    return true;
   } catch (err) {
     console.error('Erreur lecture:', err.message);
+    // Informe le salon de l'erreur
+    if (state.textChannel) {
+      state.textChannel.send(`❌ Impossible de lire **${song.title}** : ${err.message.slice(0, 100)}\nEssaie un autre lien ou chanson.`).catch(() => {});
+    }
+    // Retire la chanson problématique et continue
     state.queue.shift();
-    playSong(guildId);
+    if (state.queue.length > 0) return playSong(guildId);
+
+    state.nowPlaying = null;
+    const conn = getVoiceConnection(guildId);
+    if (conn) conn.destroy();
+    state.connection = null;
+    return false;
   }
 }
 
-// Initialise les événements du player pour un serveur
 function setupPlayer(guildId) {
   const state = getState(guildId);
+  state.player.removeAllListeners();
 
   state.player.on(AudioPlayerStatus.Idle, () => {
     if (state.loop && state.nowPlaying) {
-      // Boucle sur la même chanson
       playSong(guildId);
     } else {
       state.queue.shift();
@@ -122,12 +134,16 @@ function setupPlayer(guildId) {
   });
 
   state.player.on('error', (err) => {
-    console.error('Erreur player:', err.message);
+    console.error('Player error:', err.message);
+    if (state.textChannel) {
+      state.textChannel.send('❌ Erreur audio. Passage à la chanson suivante...').catch(() => {});
+    }
     state.queue.shift();
     playSong(guildId);
   });
 }
 
+// Retourne { ok, error } 
 async function addAndPlay(guildId, song, member, textChannel) {
   const state = getState(guildId);
   state.textChannel = textChannel;
@@ -136,23 +152,28 @@ async function addAndPlay(guildId, song, member, textChannel) {
   const wasEmpty = state.queue.length === 0;
   state.queue.push(song);
 
-  // Rejoindre le vocal si pas déjà connecté
   if (!state.connection) {
-    const connection = joinVoiceChannel({
-      channelId: member.voice.channel.id,
-      guildId,
-      adapterCreator: member.guild.voiceAdapterCreator,
-    });
-    connection.subscribe(state.player);
-    state.connection = connection;
-    setupPlayer(guildId);
+    try {
+      const connection = joinVoiceChannel({
+        channelId: member.voice.channel.id,
+        guildId,
+        adapterCreator: member.guild.voiceAdapterCreator,
+      });
+      connection.subscribe(state.player);
+      state.connection = connection;
+      setupPlayer(guildId);
+    } catch (err) {
+      state.queue.pop();
+      return { ok: false, error: `Impossible de rejoindre le vocal : ${err.message}` };
+    }
   }
 
   if (wasEmpty) {
-    await playSong(guildId);
-  } else {
-    textChannel.send(`✅ **${song.title}** ajouté à la queue ! (Position ${state.queue.length})`);
+    const ok = await playSong(guildId);
+    return { ok, error: ok ? null : 'Erreur lors de la lecture. Essaie un autre lien.' };
   }
+
+  return { ok: true, queued: true };
 }
 
 function skipSong(guildId) {
@@ -176,11 +197,11 @@ function togglePause(guildId) {
   if (state.paused) {
     state.player.unpause();
     state.paused = false;
-    return false; // était en pause, maintenant joue
+    return false;
   } else {
     state.player.pause();
     state.paused = true;
-    return true; // maintenant en pause
+    return true;
   }
 }
 
