@@ -11,16 +11,16 @@ const User = mongoose.model('User', userSchema);
 
 let connected = false;
 
-async function connectDB() {
+async function connect() {
   if (!connected) {
     await mongoose.connect(process.env.MONGODB_URI);
     connected = true;
-    console.log('✅ Connecté à MongoDB');
   }
 }
 
+// XP requis par niveau — courbe lente (niveau 100 ≈ 500 000 XP)
 function xpForLevel(level) {
-  return Math.floor(27 * Math.pow(level, 1.8));
+  return Math.floor(100 * Math.pow(level, 2.1));
 }
 
 function getLevel(xp) {
@@ -30,7 +30,7 @@ function getLevel(xp) {
 }
 
 async function addXP(userId, username, amount) {
-  await connectDB();
+  await connect();
   let user = await User.findOne({ userId });
   if (!user) user = new User({ userId, username, xp: 0, level: 0 });
   user.username = username;
@@ -42,7 +42,7 @@ async function addXP(userId, username, amount) {
 }
 
 async function removeXP(userId, amount) {
-  await connectDB();
+  await connect();
   const user = await User.findOne({ userId });
   if (!user) return null;
   user.xp = Math.max(0, user.xp - amount);
@@ -52,20 +52,20 @@ async function removeXP(userId, amount) {
 }
 
 async function getStats(userId) {
-  await connectDB();
+  await connect();
   const user = await User.findOne({ userId });
   if (!user) return null;
   return { username: user.username, xp: user.xp, level: user.level };
 }
 
 async function getLeaderboard() {
-  await connectDB();
+  await connect();
   const users = await User.find().sort({ xp: -1 }).limit(10);
   return users.map(u => [u.userId, { username: u.username, xp: u.xp, level: u.level }]);
 }
 
 async function resetAll() {
-  await connectDB();
+  await connect();
   await User.deleteMany({});
 }
 
@@ -88,8 +88,13 @@ const MIGRATION_DATA = {
   "1270776301158141953": { username: "Soba ナズナ", xp: 360, level: 4 }
 };
 
+async function connectDB() {
+  await connect();
+  console.log('✅ Connecté à MongoDB');
+}
+
 async function runMigration() {
-  await connectDB();
+  await connect();
   for (const [userId, stats] of Object.entries(MIGRATION_DATA)) {
     await User.findOneAndUpdate(
       { userId },
@@ -98,16 +103,7 @@ async function runMigration() {
     );
   }
   console.log('✅ Migration : 16 membres restaurés');
+  return MIGRATION_DATA;
 }
 
-module.exports = {
-  connectDB,
-  runMigration,
-  addXP,
-  removeXP,
-  getStats,
-  getLevel,
-  xpForLevel,
-  getLeaderboard,
-  resetAll
-};
+module.exports = { connectDB, runMigration, addXP, removeXP, getStats, getLevel, xpForLevel, getLeaderboard, resetAll };
