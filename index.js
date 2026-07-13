@@ -135,20 +135,27 @@ async function updateRoles(member, level) {
   }
 }
 
+async function registerCommands(guild) {
+  const rest = new REST({ version: '10' }).setToken(TOKEN);
+  await rest.put(Routes.applicationGuildCommands(client.user.id, guild.id), { body: commands });
+  console.log(`✅ Commandes enregistrées sur ${guild.name}`);
+}
+
 client.once('ready', async () => {
   console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
-  await connectDB();
 
-  // Enregistrement des slash commands
+  // Les commandes doivent rester disponibles même si MongoDB est temporairement indisponible.
   try {
-    const rest = new REST({ version: '10' }).setToken(TOKEN);
-    const guild = client.guilds.cache.first();
-    if (guild) {
-      await rest.put(Routes.applicationGuildCommands(client.user.id, guild.id), { body: commands });
-      console.log('✅ Slash commands enregistrées !');
-    }
+    await connectDB();
   } catch (err) {
-    console.error('Erreur slash commands:', err.message);
+    console.error('Erreur MongoDB au démarrage:', err.message);
+  }
+
+  // Les commandes sont enregistrées sur chaque serveur où le bot est présent.
+  try {
+    await Promise.all(client.guilds.cache.map(registerCommands));
+  } catch (err) {
+    console.error('Erreur d’enregistrement des commandes:', err.message);
   }
 
   // XP vocal toutes les 5 minutes
@@ -188,6 +195,11 @@ client.on('voiceStateUpdate', (oldState, newState) => {
   const userId = newState.id;
   if (!oldState.channelId && newState.channelId) voiceTracker.set(userId, Date.now());
   if (oldState.channelId && !newState.channelId) voiceTracker.delete(userId);
+});
+
+// Enregistre immédiatement les commandes quand le bot rejoint un nouveau serveur.
+client.on('guildCreate', guild => {
+  registerCommands(guild).catch(err => console.error(`Erreur commandes sur ${guild.name}:`, err.message));
 });
 
 // Bienvenue
