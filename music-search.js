@@ -1,33 +1,44 @@
-const axios = require('axios');
+const play = require('play-dl');
+
+function formatSong(video) {
+  const thumbnails = video.thumbnails || [];
+  return {
+    url: video.url,
+    pageUrl: video.url,
+    title: video.title || 'Titre inconnu',
+    artist: video.channel?.name || video.channel?.url || 'Artiste inconnu',
+    album: 'YouTube',
+    duration: Number(video.durationInSec) || 0,
+    cover: thumbnails.at(-1)?.url || null,
+    requestedBy: null
+  };
+}
 
 async function searchSong(query) {
+  const input = query?.trim();
+  if (!input) return { error: 'Indique un titre ou un lien YouTube.' };
+
   try {
-    // Recherche via l'API publique Deezer (pas d'IP block contrairement à YouTube)
-    const response = await axios.get('https://api.deezer.com/search', {
-      params: { q: query, limit: 5 },
-      timeout: 8000
+    const validation = play.yt_validate(input);
+    if (validation === 'video') {
+      const info = await play.video_basic_info(input);
+      return formatSong(info.video_details);
+    }
+
+    if (validation === 'playlist') {
+      return { error: 'Les playlists ne sont pas encore prises en charge. Choisis une vidéo ou indique un titre.' };
+    }
+
+    const results = await play.search(input, {
+      limit: 1,
+      source: { youtube: 'video' }
     });
 
-    const tracks = response.data?.data;
-    if (!tracks || tracks.length === 0) return { error: 'Aucune chanson trouvée sur Deezer.' };
-
-    // Préfère un track avec preview disponible
-    const track = tracks.find(t => t.preview) || tracks[0];
-    if (!track.preview) return { error: 'Aucune preview disponible pour cette chanson.' };
-
-    return {
-      url: track.preview,           // MP3 direct (30s)
-      pageUrl: track.link,
-      title: track.title,
-      artist: track.artist.name,
-      album: track.album.title,
-      duration: Math.min(track.duration, 30), // preview = 30s
-      cover: track.album.cover_big,
-      requestedBy: null
-    };
-  } catch (err) {
-    console.error('Erreur Deezer:', err.message);
-    return { error: `Erreur de recherche : ${err.message}` };
+    if (!results.length) return { error: 'Aucune chanson trouvée sur YouTube.' };
+    return formatSong(results[0]);
+  } catch (error) {
+    console.error('[Music] Erreur de recherche YouTube:', error.message);
+    return { error: 'La recherche YouTube a échoué. Réessaie avec un autre titre ou un lien vidéo.' };
   }
 }
 

@@ -1,15 +1,23 @@
 {
   "name": "mon-bot-discord",
   "version": "1.0.0",
-  "description": "",
+  "description": "Bot Discord communautaire avec XP, modération, tickets et musique.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "test": "node --check index.js && node --check music-player.js && node --check music-search.js && node --check music-handler.js"
   },
-  "keywords": [],
+  "keywords": [
+    "discord",
+    "bot",
+    "music"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@discordjs/voice": "^0.16.1",
     "axios": "^1.18.1",
