@@ -191,6 +191,11 @@ client.on('voiceStateUpdate', (oldState, newState) => {
   if (oldState.channelId && !newState.channelId) voiceTracker.delete(userId);
 });
 
+// Enregistre immédiatement les commandes quand le bot rejoint un nouveau serveur.
+client.on('guildCreate', guild => {
+  registerCommands(guild).catch(err => console.error(`Erreur commandes sur ${guild.name}:`, err.message));
+});
+
 // Bienvenue
 client.on('guildMemberAdd', async (member) => {
   const roleNames = ['Membre', '🐒 Bébé Singe'];
