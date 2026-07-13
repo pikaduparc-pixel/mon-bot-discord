@@ -143,7 +143,13 @@ async function registerCommands(guild) {
 
 client.once('ready', async () => {
   console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
-  await connectDB();
+
+  // Les commandes doivent rester disponibles même si MongoDB est temporairement indisponible.
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error('Erreur MongoDB au démarrage:', err.message);
+  }
 
   // Les commandes sont enregistrées sur chaque serveur où le bot est présent.
   try {
