@@ -135,20 +135,21 @@ async function updateRoles(member, level) {
   }
 }
 
+async function registerCommands(guild) {
+  const rest = new REST({ version: '10' }).setToken(TOKEN);
+  await rest.put(Routes.applicationGuildCommands(client.user.id, guild.id), { body: commands });
+  console.log(`✅ Commandes enregistrées sur ${guild.name}`);
+}
+
 client.once('ready', async () => {
   console.log(`✅ Bot connecté en tant que ${client.user.tag}`);
   await connectDB();
 
-  // Enregistrement des slash commands
+  // Les commandes sont enregistrées sur chaque serveur où le bot est présent.
   try {
-    const rest = new REST({ version: '10' }).setToken(TOKEN);
-    const guild = client.guilds.cache.first();
-    if (guild) {
-      await rest.put(Routes.applicationGuildCommands(client.user.id, guild.id), { body: commands });
-      console.log('✅ Slash commands enregistrées !');
-    }
+    await Promise.all(client.guilds.cache.map(registerCommands));
   } catch (err) {
-    console.error('Erreur slash commands:', err.message);
+    console.error('Erreur d’enregistrement des commandes:', err.message);
   }
 
   // XP vocal toutes les 5 minutes
