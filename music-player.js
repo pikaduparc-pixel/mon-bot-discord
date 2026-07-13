@@ -2,22 +2,23 @@ const {
   createAudioPlayer,
   createAudioResource,
   AudioPlayerStatus,
-  StreamType,
+  NoSubscriberBehavior,
+  VoiceConnectionStatus,
+  entersState,
   joinVoiceChannel,
   getVoiceConnection
 } = require('@discordjs/voice');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-
-// S'assurer que ffmpeg-static est utilisé
-try {
-  process.env.FFMPEG_PATH = require('ffmpeg-static');
-} catch (e) {}
+const play = require('play-dl');
 
 const guildStates = new Map();
 
 function getState(guildId) {
   if (!guildStates.has(guildId)) {
-    const player = createAudioPlayer();
+    const player = createAudioPlayer({
+      behaviors: { noSubscriber: NoSubscriberBehavior.Pause }
+    });
+
     guildStates.set(guildId, {
       queue: [],
       player,
@@ -25,32 +26,32 @@ function getState(guildId) {
       nowPlaying: null,
       loop: false,
       paused: false,
-      textChannel: null,
+      skipRequested: false,
+      textChannel: null
     });
   }
   return guildStates.get(guildId);
 }
 
 function formatDuration(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
+  const value = Number(seconds) || 0;
+  return `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
 }
 
 function createNowPlayingEmbed(song, requestedBy) {
   return new EmbedBuilder()
-    .setColor(0xFF6B00)
-    .setAuthor({ name: '🎵 En cours de lecture — Preview Deezer (30s)' })
+    .setColor(0xFF0000)
+    .setAuthor({ name: '🎵 En cours de lecture — YouTube' })
     .setTitle(song.title)
-    .setURL(song.pageUrl || 'https://deezer.com')
+    .setURL(song.pageUrl || song.url)
     .addFields(
-      { name: '👤 Artiste', value: song.artist, inline: true },
-      { name: '💿 Album', value: song.album || 'Inconnu', inline: true },
+      { name: '👤 Chaîne', value: song.artist, inline: true },
+      { name: '⏱️ Durée', value: formatDuration(song.duration), inline: true },
       { name: '📩 Demandé par', value: requestedBy ? `<@${requestedBy}>` : 'Inconnu', inline: true }
     )
-    .setFooter({ text: 'Preview 30s via Deezer • /queue pour voir la file' })
+    .setFooter({ text: 'Utilise les boutons ou /queue pour contrôler la musique.' })
     .setTimestamp()
-    .setThumbnail(song.cover || null);
+    .setThumbnail(song.cover);
 }
 
 function createControlButtons(guildId) {
@@ -63,90 +64,89 @@ function createControlButtons(guildId) {
 }
 
 function createQueueEmbed(queue, nowPlaying) {
-  const lines = queue.slice(0, 10).map((s, i) =>
-    `**${i + 1}.** ${s.title} — ${s.artist} (${formatDuration(s.duration)})`
+  const lines = queue.slice(1, 11).map((song, index) =>
+    `**${index + 1}.** ${song.title} — ${song.artist} (${formatDuration(song.duration)})`
   );
+
   return new EmbedBuilder()
-    .setColor(0xFF6B00)
-    .setTitle('🎵 File d\'attente')
+    .setColor(0xFF0000)
+    .setTitle('🎵 File d’attente')
     .setDescription(
       (nowPlaying ? `**▶️ En cours :** ${nowPlaying.title} — ${nowPlaying.artist}\n\n` : '') +
-      (lines.length ? lines.join('\n') : '*Queue vide*')
+      (lines.length ? lines.join('\n') : '*Aucune autre chanson en attente*')
     )
-    .setFooter({ text: `${queue.length} chanson(s) en attente` });
+    .setFooter({ text: `${Math.max(0, queue.length - 1)} chanson(s) en attente` });
+}
+
+function disconnect(guildId) {
+  const state = getState(guildId);
+  const connection = state.connection || getVoiceConnection(guildId);
+  if (connection) connection.destroy();
+  state.connection = null;
+  state.nowPlaying = null;
+  state.paused = false;
+  state.skipRequested = false;
 }
 
 async function playSong(guildId) {
   const state = getState(guildId);
+  const song = state.queue[0];
 
-  if (state.queue.length === 0) {
-    state.nowPlaying = null;
-    const conn = getVoiceConnection(guildId);
-    if (conn) conn.destroy();
-    state.connection = null;
-    if (state.textChannel) state.textChannel.send('✅ Queue terminée !').catch(() => {});
-    return true;
+  if (!song) {
+    disconnect(guildId);
+    if (state.textChannel) state.textChannel.send('✅ File d’attente terminée !').catch(() => {});
+    return;
   }
 
-  const song = state.queue[0];
   state.nowPlaying = song;
+  state.paused = false;
 
   try {
-    console.log(`[Music] Lecture: ${song.title} | URL: ${song.url}`);
-
-    // Passer l'URL directement — ffmpeg gère les URLs HTTP nativement
-    const resource = createAudioResource(song.url, {
-      inputType: StreamType.Arbitrary,
+    const stream = await play.stream(song.url, { discordPlayerCompatibility: true });
+    const resource = createAudioResource(stream.stream, {
+      inputType: stream.type,
+      metadata: { title: song.title }
     });
 
     state.player.play(resource);
-    console.log(`[Music] Player démarré pour: ${song.title}`);
-
     if (state.textChannel) {
       state.textChannel.send({
         embeds: [createNowPlayingEmbed(song, song.requestedBy)],
         components: [createControlButtons(guildId)]
       }).catch(() => {});
     }
-    return true;
-  } catch (err) {
-    console.error('[Music] Erreur lecture:', err.message, err.stack);
+  } catch (error) {
+    console.error('[Music] Impossible de lire la vidéo:', error.message);
     if (state.textChannel) {
-      state.textChannel.send(`❌ Impossible de lire **${song.title}** : ${err.message.slice(0, 100)}`).catch(() => {});
+      state.textChannel.send(`❌ Impossible de lire **${song.title}**. Passage au titre suivant.`).catch(() => {});
     }
     state.queue.shift();
-    if (state.queue.length > 0) return playSong(guildId);
     state.nowPlaying = null;
-    const conn = getVoiceConnection(guildId);
-    if (conn) conn.destroy();
-    state.connection = null;
-    return false;
+    return playSong(guildId);
   }
+}
+
+function advanceSong(guildId) {
+  const state = getState(guildId);
+  if (!state.nowPlaying) return;
+
+  const repeatCurrent = state.loop && !state.skipRequested;
+  state.skipRequested = false;
+  state.paused = false;
+
+  if (!repeatCurrent) state.queue.shift();
+  state.nowPlaying = null;
+  playSong(guildId).catch(error => console.error('[Music] Avance impossible:', error.message));
 }
 
 function setupPlayer(guildId) {
   const state = getState(guildId);
   state.player.removeAllListeners();
 
-  state.player.on(AudioPlayerStatus.Idle, () => {
-    console.log(`[Music] Idle — loop:${state.loop} queue:${state.queue.length}`);
-    if (state.loop && state.nowPlaying) {
-      playSong(guildId);
-    } else {
-      state.queue.shift();
-      playSong(guildId);
-    }
-  });
-
-  state.player.on(AudioPlayerStatus.Playing, () => {
-    console.log(`[Music] Lecture en cours: ${state.nowPlaying?.title}`);
-  });
-
-  state.player.on('error', (err) => {
-    console.error('[Music] Player error:', err.message);
-    if (state.textChannel) state.textChannel.send(`❌ Erreur audio: ${err.message.slice(0, 100)}`).catch(() => {});
-    state.queue.shift();
-    playSong(guildId);
+  state.player.on(AudioPlayerStatus.Idle, () => advanceSong(guildId));
+  state.player.on('error', error => {
+    console.error('[Music] Erreur du lecteur:', error.message);
+    advanceSong(guildId);
   });
 }
 
@@ -158,53 +158,55 @@ async function addAndPlay(guildId, song, member, textChannel) {
   const wasEmpty = state.queue.length === 0;
   state.queue.push(song);
 
-  if (!state.connection) {
-    try {
+  try {
+    if (!state.connection) {
       const connection = joinVoiceChannel({
         channelId: member.voice.channel.id,
         guildId,
         adapterCreator: member.guild.voiceAdapterCreator,
+        selfDeaf: true
       });
+      await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
       connection.subscribe(state.player);
       state.connection = connection;
       setupPlayer(guildId);
-      console.log(`[Music] Connecté au vocal: ${member.voice.channel.name}`);
-    } catch (err) {
-      console.error('[Music] Erreur connexion vocale:', err.message);
-      state.queue.pop();
-      return { ok: false, error: `Impossible de rejoindre le vocal : ${err.message}` };
     }
-  }
 
-  if (wasEmpty) {
-    const ok = await playSong(guildId);
-    return { ok, error: ok ? null : 'Erreur lors de la lecture.' };
+    if (wasEmpty) await playSong(guildId);
+    return { ok: true, queued: !wasEmpty };
+  } catch (error) {
+    console.error('[Music] Connexion vocale impossible:', error.message);
+    state.queue = state.queue.filter(queuedSong => queuedSong !== song);
+    disconnect(guildId);
+    return { ok: false, error: 'Impossible de rejoindre le canal vocal.' };
   }
-
-  return { ok: true, queued: true };
 }
 
 function skipSong(guildId) {
-  console.log('[Music] Skip demandé');
-  getState(guildId).player.stop();
+  const state = getState(guildId);
+  state.skipRequested = true;
+  state.player.stop();
 }
 
 function stopMusic(guildId) {
-  console.log('[Music] Stop demandé');
   const state = getState(guildId);
   state.queue = [];
   state.nowPlaying = null;
   state.loop = false;
-  state.player.stop();
-  const conn = getVoiceConnection(guildId);
-  if (conn) conn.destroy();
-  state.connection = null;
+  state.player.stop(true);
+  disconnect(guildId);
 }
 
 function togglePause(guildId) {
   const state = getState(guildId);
-  if (state.paused) { state.player.unpause(); state.paused = false; return false; }
-  else { state.player.pause(); state.paused = true; return true; }
+  if (state.paused) {
+    state.player.unpause();
+    state.paused = false;
+  } else {
+    state.player.pause();
+    state.paused = true;
+  }
+  return state.paused;
 }
 
 function toggleLoop(guildId) {
@@ -213,10 +215,19 @@ function toggleLoop(guildId) {
   return state.loop;
 }
 
-function getGuildState(guildId) { return getState(guildId); }
+function getGuildState(guildId) {
+  return getState(guildId);
+}
 
 module.exports = {
-  addAndPlay, skipSong, stopMusic, togglePause, toggleLoop,
-  getGuildState, createNowPlayingEmbed, createControlButtons,
-  createQueueEmbed, formatDuration
+  addAndPlay,
+  skipSong,
+  stopMusic,
+  togglePause,
+  toggleLoop,
+  getGuildState,
+  createNowPlayingEmbed,
+  createControlButtons,
+  createQueueEmbed,
+  formatDuration
 };
